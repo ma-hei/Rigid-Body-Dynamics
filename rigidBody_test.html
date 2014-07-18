@@ -115,6 +115,12 @@
                 bodies[index].x[1] = x[temp+1];
                 bodies[index].x[2] = x[temp+2];
                 
+                
+                
+                  //  text = window.document.getElementById("textField");
+                  //  text.innerHTML = bodies[index].R[0][0]+"; "+bodies[index].P[1]+"; "+bodies[index].P[2];
+                    
+               
                 bodies[index].q.vector[0] = x[temp+3];
                 bodies[index].q.vector[1] = x[temp+4];
                 bodies[index].q.vector[2] = x[temp+5];
@@ -132,19 +138,43 @@
                     bodies[index].v[i] = bodies[index].P[i]/bodies[index].mass;
                 }
                 
+                if (counter==110){
+                    
+                   // text = window.document.getElementById("textField");
+                   // text.innerHTML = bodies[index].v[0]+"; "+bodies[index].v[1]+"; "+bodies[index].v[2];
+                    
+                }
                 
+                if (counter==102){
+                    
+                   // text = window.document.getElementById("textField");
+                   // text.innerHTML = bodies[index].P[0]+"; "+bodies[index].P[1]+"; "+bodies[index].P[2];
+                    
+                }
+                
+                if (counter==103){
+                    
+                   // text = window.document.getElementById("textField");
+                   // text.innerHTML = bodies[index].force[0]+"; "+bodies[index].force[1]+"; "+bodies[index].force[2];
+                   
+                }
                 
                 normalize(bodies[index].q, qtemp);
                 
-                
-                
                 quaternionToMatrix(qtemp, bodies[index].R);
                 
-                
+                if (counter==1){
+                    text = window.document.getElementById("textField");
+                    text.innerHTML = bodies[index].R[0][0]+"; "+bodies[index].P[1]+"; "+bodies[index].L[2];
+                }
+        
                 bodies[index].Iinv = numeric.dot((numeric.dot(bodies[index].R, bodies[index].Ibodyinv)), numeric.transpose(bodies[index].R));
                 bodies[index].omega = numeric.dot(bodies[index].Iinv, bodies[index].L);
                 
-              
+                //if (counter==2){
+                    text = window.document.getElementById("textField");
+                    text.innerHTML = bodies[index].x[0]+"; "+bodies[index].omega[0]+"; "+bodies[index].L[0][2];
+                //}
                 
             }
             
@@ -237,15 +267,15 @@
             
             function initBody(){
                 
-                force[0]=0.00001;
-                force[1]=0;
-                force[2]=0;
+                bodies[0].force[0]=0.00002;
+                bodies[0].force[1]=0.00002;
+                bodies[0].force[2]=0;
                 
-                tempPos[0]=0.5;
-                tempPos[1]=0.5;
+                tempPos[0]=0;
+                tempPos[1]=-5.0;
                 tempPos[2]=0;
                 
-                crossproduct(force, tempPos, bodies[0].torque);
+                crossproduct(bodies[0].force, tempPos, bodies[0].torque);
                 
             }
             
@@ -386,16 +416,16 @@
                 gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                 
                 temp1 = numeric.dot(bodies[0].R, [-0.5,-0.5,0]);
-                //temp1 = numeric.add(temp1, bodies[0].x);
+                temp1 = numeric.add(temp1, bodies[0].x);
                 
                 temp2 = numeric.dot(bodies[0].R, [0.5,-0.5,0]);
-                //temp2 = numeric.add(temp2, bodies[0].x);
+                temp2 = numeric.add(temp2, bodies[0].x);
                 
                 temp3 = numeric.dot(bodies[0].R, [0.5,0.5,0]);
-                //temp3 = numeric.add(temp3, bodies[0].x);
+                temp3 = numeric.add(temp3, bodies[0].x);
                 
                 temp4 = numeric.dot(bodies[0].R, [-0.5,0.5,0]);
-                //temp4 = numeric.add(temp4, bodies[0].x);
+                temp4 = numeric.add(temp4, bodies[0].x);
                 
                 vertexes[0]=temp1[0];
                 vertexes[1]=temp1[1];
@@ -440,7 +470,7 @@
            
             
             function nextFrame(){
-                
+               
                 t = 1/24;
                 
                 for (var i=0; i<stateSize*numberBodies; i++){
