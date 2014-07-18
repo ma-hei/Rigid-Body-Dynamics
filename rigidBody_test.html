@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+            <title>stuff</title>
+            <script type="text/javascript" src="numeric-1.2.6.js"></script>
+            <script type="text/javascript" src="webgl-utils.js"></script>
+            <script type="text/javascript" src="gl-matrix.js"></script>
+            <script type="text/javascript" src="dat.gui.js"></script>
+            <script type="text/javascript" src="Quaternion.js"></script>
+            <script type="text/javascript" src="rigidBody.js"></script>
+            
+            
+            <script id="shader-fs" type="x-shader/x-fragment">
+                precision mediump float;
+                void main()
+                {
+                    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+                    
+                }
+            </script>
+            
+            <script id="shader-vs" type="x-shader/x-vertex">
+                attribute vec3 vPosition;
+                uniform mat4 uPMatrix;
+                uniform mat4 uMVMatrix;
+                void main()
+                {
+                    //gl_Position = vPosition;
+                    gl_Position = uPMatrix * uMVMatrix * vec4(vPosition, 1.0);
+                    gl_PointSize = 2.0;
+                }
+            </script>
+            
+            <script type="text/javascript">
+                
+            var counter=0;
+            var numberBodies = 1;
+            var stateSize = 13;
+               
+            bodies = new Array(numberBodies);
+            for (var i=0;i<numberBodies;i++){
+                   bodies[i] = new rigidBody();
+                   bodies[i].init();
+            }
+            
+            bodies[0].x[0]=0;
+            bodies[0].x[1]=0;
+            bodies[0].x[2]=0;
+            
+            stateVector = new Array(numberBodies*stateSize);
+            xdot = new Array(stateSize);
+            x0 = new Array(stateSize*numberBodies);
+            xFinal = new Array(stateSize*numberBodies);
+            
+            for (var i=0;i<stateSize*numberBodies;i++){
+                x0[i]=0;
+                xFinal[i]=0;
+            }
+            
+            
+            var vertexBuffer;
+            
+            function state_to_array(x, index){
+                
+                var temp = index*13;
+                
+                x[temp+0] = bodies[index].x[0];
+                x[temp+1] = bodies[index].x[1];
+                x[temp+2] = bodies[index].x[2];
+                
+                x[temp+3] = bodies[index].q.vector[0];
+                x[temp+4] = bodies[index].q.vector[1];
+                x[temp+5] = bodies[index].q.vector[2];
+                x[temp+6] = bodies[index].q.s;
+                
+                x[temp+7] = bodies[index].P[0];
+                x[temp+8] = bodies[index].P[1];
+                x[temp+9] = bodies[index].P[2];
+                
+                x[temp+10] = bodies[index].L[0];
+                x[temp+11] = bodies[index].L[1];
+                x[temp+12] = bodies[index].L[2];
+                
+                
+            }
+            
+            function normalize(q,qout){
+                
+                var length = q.vector[0]*q.vector[0]+q.vector[1]+q.vector[1]+q.vector[2]*q.vector[2]+q.s*q.s;
+                length = Math.sqrt(length);
+                
+                if (length!=0){
+                    qout.vector[0]=q.vector[0]/length;
+                    qout.vector[1]=q.vector[1]/length;
+                    qout.vector[2]=q.vector[2]/length;
+                    qout.s=q.s/length;
+                }
+                else{
+                    qout.vector[0]=0;
+                    qout.vector[1]=0;
+                    qout.vector[2]=0;
+                    qout.s=1;
+                }
+                
+            }
+            
+            qtemp = new Quaternion();
+            
+            function array_to_state(index, x){
+                
+                var temp = index*13;
+                
+                bodies[index].x[0] = x[temp+0];
+                bodies[index].x[1] = x[temp+1];
+                bodies[index].x[2] = x[temp+2];
+                
+                bodies[index].q.vector[0] = x[temp+3];
+                bodies[index].q.vector[1] = x[temp+4];
+                bodies[index].q.vector[2] = x[temp+5];
+                bodies[index].q.s = x[temp+6];
+                
+                bodies[index].P[0] = x[temp+7];
+                bodies[index].P[1] = x[temp+8];
+                bodies[index].P[2] = x[temp+9];
+                
+                bodies[index].L[0] = x[temp+10];
+                bodies[index].L[1] = x[temp+11];
+                bodies[index].L[2] = x[temp+12];
+                
+                for (var i=0;i<3;i++){
+                    bodies[index].v[i] = bodies[index].P[i]/bodies[index].mass;
+                }
+                
+                
+                
+                normalize(bodies[index].q, qtemp);
+                
+                
+                
+                quaternionToMatrix(qtemp, bodies[index].R);
+                
+                
+                bodies[index].Iinv = numeric.dot((numeric.dot(bodies[index].R, bodies[index].Ibodyinv)), numeric.transpose(bodies[index].R));
+                bodies[index].omega = numeric.dot(bodies[index].Iinv, bodies[index].L);
+                
+              
+                
+            }
+            
+            function array_to_bodies(x){
+                
+                
+                for (var i=0; i<numberBodies; i++){
+                    array_to_state(i,x);
+                }
+                
+                
+            }
+            
+            function bodies_to_array(x){
+                
+                for (var i=0; i<numberBodies;i++){
+                    state_to_array(x,i);
+                }
+            }
+            
+            function multiplyQuaternions(q1, q2, q3){
+                
+                q3.s = 0.5*(q1.s*q2.s-(q1.vector[0]*q2.vector[0]+q1.vector[1]*q2.vector[1]+q1.vector[2]*q2.vector[2]));
+                q3.vector[0] = 0.5*(q1.s*q2.vector[0] + q2.s*q1.vector[0] + (q1.vector[1]*q2.vector[2] - q1.vector[2]*q2.vector[1]));
+                q3.vector[1] = 0.5*(q1.s*q2.vector[1] + q2.s*q1.vector[1] + (q1.vector[2]*q2.vector[0] - q1.vector[0]*q2.vector[2]));
+                q3.vector[2] = 0.5*(q1.s*q2.vector[2] + q2.s*q1.vector[2] + (q1.vector[0]*q2.vector[1] - q1.vector[1]*q2.vector[0]));
+                
+            }
+            
+            function quaternionToMatrix(q,temp){
+               
+                temp[0][0] = 1-2*q.vector[1]*q.vector[1]-2*q.vector[2]*q.vector[2];
+                temp[0][1] = 2*q.vector[0]*q.vector[1]-2*q.s*q.vector[2];
+                temp[0][2] = 2*q.vector[0]*q.vector[2]+2*q.s*q.vector[1];
+                
+                temp[1][0] = 2*q.vector[0]*q.vector[1]+2*q.s*q.vector[2];
+                temp[1][1] = 1-2*q.vector[0]*q.vector[0]-2*q.vector[2]*q.vector[2];
+                temp[1][2] = 2*q.vector[1]*q.vector[2]-2*q.s*q.vector[0];
+                
+                temp[2][0] = 2*q.vector[0]*q.vector[2]-2*q.s*q.vector[1];
+                temp[2][1] = 2*q.vector[1]*q.vector[2]+2*q.s*q.vector[0];
+                temp[2][2] = 1-2*q.vector[0]*q.vector[0] - 2*q.vector[1]*q.vector[1];
+                
+            }
+            
+            tempQ = new Quaternion();
+            tempQ2 = new Quaternion();
+            
+            
+            function ddt_state_to_array(body, index){
+                
+                xdot[index+0] = body.v[0];
+                xdot[index+1] = body.v[1];
+                xdot[index+2] = body.v[2];
+                
+                tempQ.vector[0] = body.omega[0];
+                tempQ.vector[1] = body.omega[1];
+                tempQ.vector[2] = body.omega[2];
+                tempQ.s=0;
+                
+                multiplyQuaternions(tempQ, body.q, tempQ2);
+                
+                xdot[index+3] = tempQ2.vector[0];
+                xdot[index+4] = tempQ2.vector[1];
+                xdot[index+5] = tempQ2.vector[2];
+                xdot[index+6] = tempQ2.s;
+                
+                xdot[index+7] = body.force[0];
+                xdot[index+8] = body.force[1];
+                xdot[index+9] = body.force[2];
+                
+                xdot[index+10] = body.torque[0];
+                xdot[index+11] = body.torque[1];
+                xdot[index+12] = body.torque[2];
+                
+                
+            }
+            
+            var force = new Array(3);
+            var tempPos = new Array(3);
+            var torque = new Array(3);
+            
+            function crossproduct(vec1, vec2, vec3){
+                
+                vec3[0] = vec1[1]*vec2[2]-vec1[2]*vec2[1];
+                vec3[1] = vec1[2]*vec2[0]-vec1[0]*vec2[2];
+                vec3[2] = vec1[0]*vec2[1]-vec1[1]*vec2[0];
+                
+            }
+            
+            function initBody(){
+                
+                force[0]=0.00001;
+                force[1]=0;
+                force[2]=0;
+                
+                tempPos[0]=0.5;
+                tempPos[1]=0.5;
+                tempPos[2]=0;
+                
+                crossproduct(force, tempPos, bodies[0].torque);
+                
+            }
+            
+            function compute_force_and_torque(i){
+                
+                
+                
+            }
+            
+            
+            function Dxdt(x){
+                
+                array_to_bodies(x);
+                
+                for (var i=0; i<numberBodies; i++){
+                    compute_force_and_torque(i);
+                    ddt_state_to_array(bodies[i],i*13);
+                }
+            }
+            
+            
+            
+            function ode(x0, xEnd, len, t0, t1, dxdt){
+                
+                //ode(x0, xFinal, stateSize*numberBodies, t, t+1/24, dxdt);
+               
+                dxdt(x0);
+               
+                for (var i=0;i<len;i++){
+                    xEnd[i] = x0[i] + xdot[i];
+                }
+                
+                counter++;
+            }
+            
+                
+            function initGL(){
+                    
+                    var canvas = window.document.getElementById("webGLCanvas");
+                    text = window.document.getElementById("textField");
+                    text.innerHTML = "moinmoin!!!";
+                    gl = canvas.getContext("experimental-webgl");
+
+                }
+            
+            function getShader(gl, id) {
+                var shaderScript = document.getElementById(id);
+                if (!shaderScript) {
+                    
+                    return null;
+                }
+                
+                var str = "";
+                var k = shaderScript.firstChild;
+                while (k) {
+                    if (k.nodeType == 3) {
+                        str += k.textContent;
+                    }
+                    k = k.nextSibling;
+                }
+                
+                var shader;
+                if (shaderScript.type == "x-shader/x-fragment") {
+                    shader = gl.createShader(gl.FRAGMENT_SHADER);
+                } else if (shaderScript.type == "x-shader/x-vertex") {
+                    shader = gl.createShader(gl.VERTEX_SHADER);
+                } else {
+                    return null;
+                }
+                
+                gl.shaderSource(shader, str);
+                gl.compileShader(shader);
+                
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert(gl.getShaderInfoLog(shader));
+                    return null;
+                }
+                
+                return shader;
+            }
+            
+            var mvMatrix;
+            var pMatrix;
+            
+            function initShaders(){
+                
+                var fragmentShader = getShader(gl,"shader-fs");
+                var vertexShader = getShader(gl, "shader-vs");
+                shaderProgram = gl.createProgram();
+                
+                gl.attachShader(shaderProgram, vertexShader);
+                gl.attachShader(shaderProgram, fragmentShader);
+                gl.linkProgram(shaderProgram);
+                
+                gl.useProgram(shaderProgram);
+                gl.clearColor(0.0, 0.0, 0.0, 1.0);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                
+                shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "vPosition");
+                gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+                
+                mvMatrix = new mat4.create();
+                mat4.identity(mvMatrix);
+                
+                mat4.translate(mvMatrix, mvMatrix, [0,0,-3.0]);
+                
+                var right = 2;//+0.5;
+                var left = -2;//-0.5;
+                var upper = 2;//+0.5;
+                var lower = -2;//-0.5;
+                var zFar = 100.0;
+                var zNear = 0.1;
+                pMatrix = new Float32Array(
+                                           [2/(right-left),0,0,0,
+                                            0, 2/(upper-lower),0,0,
+                                            0,0,-2/(zFar-zNear),0,
+                                            -(right+left)/(right-left), -(upper+lower)/(upper-lower), -(zFar+zNear)/(zFar-zNear),1]);
+                                            
+                var mvUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+                gl.uniformMatrix4fv(mvUniform, false, mvMatrix);
+                                            
+                var pUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+                gl.uniformMatrix4fv(pUniform, false, pMatrix);
+                
+                vertexBuffer = gl.createBuffer();
+                
+            }
+           
+           
+           var vertexes = new Float32Array(21);
+           var temp1 = new Array(3);
+           var temp2 = new Array(3);
+           var temp3 = new Array(3);
+           var temp4 = new Array(3);
+         
+        function drawScene(){
+                
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+                
+                temp1 = numeric.dot(bodies[0].R, [-0.5,-0.5,0]);
+                //temp1 = numeric.add(temp1, bodies[0].x);
+                
+                temp2 = numeric.dot(bodies[0].R, [0.5,-0.5,0]);
+                //temp2 = numeric.add(temp2, bodies[0].x);
+                
+                temp3 = numeric.dot(bodies[0].R, [0.5,0.5,0]);
+                //temp3 = numeric.add(temp3, bodies[0].x);
+                
+                temp4 = numeric.dot(bodies[0].R, [-0.5,0.5,0]);
+                //temp4 = numeric.add(temp4, bodies[0].x);
+                
+                vertexes[0]=temp1[0];
+                vertexes[1]=temp1[1];
+                vertexes[2]=temp1[2];
+                
+                vertexes[3]=temp2[0];
+                vertexes[4]=temp2[1];
+                vertexes[5]=temp2[2];
+                
+                vertexes[6]=temp3[0];
+                vertexes[7]=temp3[1];
+                vertexes[8]=temp3[2];
+                
+                vertexes[9]=temp4[0];
+                vertexes[10]=temp4[1];
+                vertexes[11]=temp4[2];
+                
+                vertexes[12]=temp1[0];
+                vertexes[13]=temp1[1];
+                vertexes[14]=temp1[2];
+                
+                vertexes[15]=-1;
+                vertexes[16]=-1;
+                vertexes[17]=0;
+                
+                vertexes[18]=1;
+                vertexes[19]=1;
+                vertexes[20]=0;
+                
+               
+               //text = window.document.getElementById("textField");
+               //text.innerHTML = bodies[0].R[0][0]+"; "+bodies[0].R[0][1]+"; "+bodies[0].R[0][2]+"</br>"+bodies[0].R[1][0]+"; "+bodies[0].R[1][1]+"; "+bodies[0].R[1][2]+"</br>"+bodies[0].R[2][0]+"; "+bodies[0].R[2][1]+"; "+bodies[0].R[2][2];
+                //text.innerHTML = temp1+"</br>"+temp2+"</br>"+temp3+"</br>"+temp4;
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
+                gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+                gl.drawArrays(gl.LINE_STRIP, 0, 5);
+                
+            }
+           
+           
+            
+            function nextFrame(){
+                
+                t = 1/24;
+                
+                for (var i=0; i<stateSize*numberBodies; i++){
+                    x0[i] = xFinal[i];
+                }
+                
+                ode(x0, xFinal, stateSize*numberBodies, t, t+1/24, Dxdt);
+                
+                array_to_bodies(xFinal);
+                
+            }
+            
+            function webGLStart(){
+                
+                
+                initGL();
+                initShaders();
+                initBody();
+                gl.clearColor(0.0, 0.0, 0.0, 1.0);// Hintergrund löschen in Farbe 0
+                bodies_to_array(xFinal);
+                
+                
+                canvas = document.getElementById("webGLCanvas");
+                                                                                                 
+                g_DrawInterval = setInterval(nextFrame,10);
+                                                                                                 
+                var renderLoop = function() {
+                            requestAnimFrame(renderLoop);
+                            drawScene();
+                };
+                                                                                                 
+                renderLoop();
+            }
+            
+            window.onload = function () {
+                
+                webGLStart();
+            };
+            
+                </script>
+            
+            </head>
+    <body>
+        <canvas id="webGLCanvas" width="500" height="500"></canvas>
+        <div id="textField">Hallo:</canvas>
+            </body>
+    
+</html>
