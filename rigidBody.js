@@ -35,7 +35,6 @@ function rigidBody(){
         this.vertexes[i] = new Array(3);
     }
     
-    
     this.init = function(){
         
         for (var i=0;i<3;i++){

@@ -9,6 +9,8 @@
             <script type="text/javascript" src="dat.gui.js"></script>
             <script type="text/javascript" src="Quaternion.js"></script>
             <script type="text/javascript" src="rigidBody.js"></script>
+            <script type="text/javascript" src="BoundingBoxOverlap.js"></script>
+            <script type="text/javascript" src="Contact.js"></script>
             
             
             <script id="shader-fs" type="x-shader/x-fragment">
@@ -34,32 +36,115 @@
             
             <script type="text/javascript">
                 
+                
+            var mvMatrix;
+            var pMatrix;
+                
             var counter=0;
-            var numberBodies = 1;
+            var numberBodies = 3;
             var stateSize = 13;
                
             bodies = new Array(numberBodies);
-            for (var i=0;i<numberBodies;i++){
+            for (var i=0;i<numberBodies+1;i++){
                    bodies[i] = new rigidBody();
                    bodies[i].init();
             }
             
-            bodies[0].x[0]=0;
-            bodies[0].x[1]=0;
+            bodies[0].x[0]=2.5;
+            bodies[0].x[1]=6;
             bodies[0].x[2]=0;
+            
+            bodies[1].x[0]=4.6;
+            bodies[1].x[1]=0;
+            bodies[1].x[2]=0;
+            
+            bodies[2].x[0]=2.8;
+            bodies[2].x[1]=-3.6;
+            bodies[2].x[2]=0;
             
             stateVector = new Array(numberBodies*stateSize);
             xdot = new Array(stateSize);
             x0 = new Array(stateSize*numberBodies);
             xFinal = new Array(stateSize*numberBodies);
-            
-            for (var i=0;i<stateSize*numberBodies;i++){
-                x0[i]=0;
-                xFinal[i]=0;
+            intervalsxindex = new Array(numberBodies*2);
+            intervalsxvalue = new Array(numberBodies*2);
+            intervalsyindex = new Array(numberBodies*2);
+            intervalsyvalue = new Array(numberBodies*2);
+            overlapsx = new Array(numberBodies);
+            overlapsy = new Array(numberBodies);
+            for (var i=0;i<numberBodies;i++){
+                overlapsx[i] = new Array(numberBodies);
+                overlapsy[i] = new Array(numberBodies);
+                for (var k=0;k<numberBodies;k++){
+                    overlapsx[i][k]=-1;
+                    overlapsy[i][k]=-1;
+                }
             }
-            
+            collisions = new Array(100);
             
             var vertexBuffer;
+            
+            tempQ = new Quaternion();
+            tempQ2 = new Quaternion();
+            qtemp = new Quaternion();
+            var vertexes = new Float32Array(15*numberBodies);
+            var temp1 = new Array(3);
+            var temp2 = new Array(3);
+            var temp3 = new Array(3);
+            var temp4 = new Array(3);
+            var tempCounter=0;
+            var sqrt2 = Math.sqrt(2);
+            var tempSwapValue;
+            var tempSwapIndex;
+            var tempBodya;
+            var tempBodyb;
+            var activeOverlapx = new Array(numberBodies);
+            var activeOverlapy = new Array(numberBodies);
+            for (var i=0;i<numberBodies;i++){
+                activeOverlapx[i] = -1;
+                activeOverlapy[i] = -1;
+            }
+            var overlaps = new Array(numberBodies);
+            for (var i=0;i<numberBodies;i++){
+                overlaps[i] = new Array(numberBodies-(i+1));
+                for (var k=0;k<numberBodies-(i+1);k++){
+                    overlaps[i][k] = new Overlap();
+                }
+            }
+            var collisionCount = 0;
+            
+            var tempEdge = new Array(3);
+            var tempEdge2 = new Array(3);
+            var tempEdge3 = new Array(3);
+            var tempEdge4 = new Array(3);
+            var tempPoint = new Array(3);
+            var tempPoint2 = new Array(3);
+            var crossproductResult = new Array(3);
+            var crossproductResult2 = new Array(3);
+            var tempNormalOfEdge = new Array(3);
+            var positionOfInterpenetrationOnVertex = new Array(3);
+            var vorzeichen1 = 0;
+            var vorzeichen2 = 0;
+            var validCounter = 0;
+            var tempSeparatingEdge = 0;
+            var tempedgeStillValid = false;
+            var newEdgeFound = false;
+            var tempInterpenetratingVertex = -1;
+            var tempArray = new Array(3);
+            var tempArray2 = new Array(3);
+            var padot = new Array(3);
+            var pbdot = new Array(3);
+            var ra = new Array(3);
+            var rb = new Array(3);
+            var force = new Array(3);
+            var vrel;
+            var numerator;
+            var epsilon = 1.2;
+            var term1;
+            var term2;
+            var term3;
+            var term4;
+            var j;
             
             function state_to_array(x, index){
                 
@@ -105,8 +190,6 @@
                 
             }
             
-            qtemp = new Quaternion();
-            
             function array_to_state(index, x){
                 
                 var temp = index*13;
@@ -115,11 +198,6 @@
                 bodies[index].x[1] = x[temp+1];
                 bodies[index].x[2] = x[temp+2];
                 
-                
-                
-                  //  text = window.document.getElementById("textField");
-                  //  text.innerHTML = bodies[index].R[0][0]+"; "+bodies[index].P[1]+"; "+bodies[index].P[2];
-                    
                
                 bodies[index].q.vector[0] = x[temp+3];
                 bodies[index].q.vector[1] = x[temp+4];
@@ -138,43 +216,15 @@
                     bodies[index].v[i] = bodies[index].P[i]/bodies[index].mass;
                 }
                 
-                if (counter==110){
-                    
-                   // text = window.document.getElementById("textField");
-                   // text.innerHTML = bodies[index].v[0]+"; "+bodies[index].v[1]+"; "+bodies[index].v[2];
-                    
-                }
                 
-                if (counter==102){
-                    
-                   // text = window.document.getElementById("textField");
-                   // text.innerHTML = bodies[index].P[0]+"; "+bodies[index].P[1]+"; "+bodies[index].P[2];
-                    
-                }
-                
-                if (counter==103){
-                    
-                   // text = window.document.getElementById("textField");
-                   // text.innerHTML = bodies[index].force[0]+"; "+bodies[index].force[1]+"; "+bodies[index].force[2];
-                   
-                }
                 
                 normalize(bodies[index].q, qtemp);
                 
                 quaternionToMatrix(qtemp, bodies[index].R);
                 
-                if (counter==1){
-                    text = window.document.getElementById("textField");
-                    text.innerHTML = bodies[index].R[0][0]+"; "+bodies[index].P[1]+"; "+bodies[index].L[2];
-                }
-        
                 bodies[index].Iinv = numeric.dot((numeric.dot(bodies[index].R, bodies[index].Ibodyinv)), numeric.transpose(bodies[index].R));
                 bodies[index].omega = numeric.dot(bodies[index].Iinv, bodies[index].L);
                 
-                //if (counter==2){
-                    text = window.document.getElementById("textField");
-                    text.innerHTML = bodies[index].x[0]+"; "+bodies[index].omega[0]+"; "+bodies[index].L[0][2];
-                //}
                 
             }
             
@@ -220,10 +270,6 @@
                 
             }
             
-            tempQ = new Quaternion();
-            tempQ2 = new Quaternion();
-            
-            
             function ddt_state_to_array(body, index){
                 
                 xdot[index+0] = body.v[0];
@@ -253,10 +299,6 @@
                 
             }
             
-            var force = new Array(3);
-            var tempPos = new Array(3);
-            var torque = new Array(3);
-            
             function crossproduct(vec1, vec2, vec3){
                 
                 vec3[0] = vec1[1]*vec2[2]-vec1[2]*vec2[1];
@@ -267,15 +309,318 @@
             
             function initBody(){
                 
-                bodies[0].force[0]=0.00002;
-                bodies[0].force[1]=0.00002;
-                bodies[0].force[2]=0;
+                bodies[2].force = [0.000,0.0002,0];
+                crossproduct(bodies[2].force, [-0.2,-0.5,0], bodies[2].torque);
+               
+            }
+            
+            function setOverlapx(i,k){
                 
-                tempPos[0]=0;
-                tempPos[1]=-5.0;
-                tempPos[2]=0;
+                if (i%2==0){
+                    tempBodya = i/2;
+                    tempBodyb = (k-1)/2;
+                }
+                else{
+                    tempBodya = (i-1)/2;
+                    tempBodyb = k/2;
+                }
                 
-                crossproduct(bodies[0].force, tempPos, bodies[0].torque);
+                
+                if (overlapsx[tempBodya][tempBodyb]==-1){
+                    overlapsx[tempBodya][tempBodyb]=1;
+                    overlapsx[tempBodyb][tempBodya]=1;
+                }
+                else{
+                    overlapsx[tempBodya][tempBodyb]=-1;
+                    overlapsx[tempBodyb][tempBodya]=-1;
+                }
+                
+            }
+            
+            function setOverlapy(i,k){
+                
+                
+                if (i%2==0){
+                    tempBodya = i/2;
+                    tempBodyb = (k-1)/2;
+                }
+                else{
+                    tempBodya = (i-1)/2;
+                    tempBodyb = k/2;
+                }
+                
+                
+                //text = window.document.getElementById("textField");
+                //text.innerHTML = tempBodya+"; "+tempBodyb;
+                
+                if (overlapsy[tempBodya][tempBodyb]==-1){
+                    overlapsy[tempBodya][tempBodyb]=1;
+                    overlapsy[tempBodyb][tempBodya]=1;
+                    
+                }
+                else{
+                    overlapsy[tempBodya][tempBodyb]=-1;
+                    overlapsy[tempBodyb][tempBodya]=-1;
+                    
+                }
+                
+            }
+            
+            function findOverlap(){
+                
+               //text = window.document.getElementById("textField");
+               //text.innerHTML = "nein";
+
+                for (var i=0;i<numberBodies;i++){
+                    for (var k=i+1;k<numberBodies;k++){
+                        if (overlapsx[i][k]==1){
+                            if (overlapsy[i][k]==1){
+                                
+                                //text = window.document.getElementById("textField");
+                                //text.innerHTML = "ja "+i+"; "+k;
+                                detectCollision(i,k);
+                                
+                                
+                            }
+                        }
+                    }
+                }
+            }
+            
+            function insertionSort(init){
+                //text = window.document.getElementById("textField");
+                //text.innerHTML = "nein";
+                for (var i=1; i<numberBodies*2;i++){
+                    for (var k=i; (k>0 && intervalsxvalue[k]<intervalsxvalue[k-1]); k--){
+                        tempSwapValue = intervalsxvalue[k-1];
+                        intervalsxvalue[k-1] = intervalsxvalue[k];
+                        intervalsxvalue[k] = tempSwapValue;
+                        
+                        tempSwapIndex = intervalsxindex[k-1];
+                        intervalsxindex[k-1] = intervalsxindex[k];
+                        intervalsxindex[k] = tempSwapIndex;
+                        
+                        if (init==0){
+                            if ((intervalsxindex[k-1]+intervalsxindex[k])%2==1){
+                                setOverlapx(intervalsxindex[k-1], intervalsxindex[k]);
+                            }
+                        }
+                        
+                    }
+                }
+                
+                for (var i=1; i<numberBodies*2;i++){
+                    for (var k=i; (k>0 && intervalsyvalue[k]<intervalsyvalue[k-1]); k--){
+                        tempSwapValue = intervalsyvalue[k-1];
+                        intervalsyvalue[k-1] = intervalsyvalue[k];
+                        intervalsyvalue[k] = tempSwapValue;
+                        
+                        tempSwapIndex = intervalsyindex[k-1];
+                        intervalsyindex[k-1] = intervalsyindex[k];
+                        intervalsyindex[k] = tempSwapIndex;
+                        
+                        if (init==0){
+                            if ((intervalsyindex[k-1]+intervalsyindex[k])%2==1){
+                                setOverlapy(intervalsyindex[k-1], intervalsyindex[k]);
+                            }
+                        }
+                        
+                    }
+                }
+            }
+            
+            function updateIntervals(){
+                
+                for (var i=0; i<numberBodies*2;i++){
+                    
+                    if (intervalsxindex[i]%2==0){
+                        intervalsxvalue[i] = bodies[intervalsxindex[i]/2].x[0]-sqrt2;
+                    }
+                    else{
+                        intervalsxvalue[i] = bodies[(intervalsxindex[i]-1)/2].x[0]+sqrt2;
+                    }
+                    
+                    if (intervalsyindex[i]%2==0){
+                        intervalsyvalue[i] = bodies[(intervalsyindex[i]/2)].x[1]-sqrt2;
+                    }
+                    else{
+                        intervalsyvalue[i] = bodies[((intervalsyindex[i]-1)/2)].x[1]+sqrt2;
+                    }
+                    
+                }
+                
+                insertionSort(0);
+                
+                //text = window.document.getElementById("textField");
+                //text.innerHTML = intervalsxindex;
+                
+            }
+            
+            function initIntervals(){
+                
+                for (var i=0; i<numberBodies;i++){
+                    
+                    intervalsxindex[i*2+0]=i*2;
+                    intervalsxindex[i*2+1]=i*2+1;
+                    intervalsyindex[i*2+0]=i*2;
+                    intervalsyindex[i*2+1]=i*2+1;
+                    
+                    intervalsxvalue[i*2+0]=bodies[i].x[0]-sqrt2;
+                    intervalsxvalue[i*2+1]=bodies[i].x[0]+sqrt2;
+                    intervalsyvalue[i*2+0]=bodies[i].x[1]-sqrt2;
+                    intervalsyvalue[i*2+1]=bodies[i].x[1]+sqrt2;
+                    
+                }
+                
+                insertionSort(1);
+                initOverlap();
+                
+                
+            }
+            
+            function checkifedgevalid(a, i, b){
+                
+                tempPoint = bodies[a].vertexes[i];
+                
+                if (i==3){
+                    tempEdge[0] = bodies[a].vertexes[0][0]-bodies[a].vertexes[i][0];
+                    tempEdge[1] = bodies[a].vertexes[0][1]-bodies[a].vertexes[i][1];
+                    tempEdge[2] = 0;
+                }
+                else{
+                    tempEdge[0] = bodies[a].vertexes[i+1][0]-bodies[a].vertexes[i][0];
+                    tempEdge[1] = bodies[a].vertexes[i+1][1]-bodies[a].vertexes[i][1];
+                    tempEdge[2] = 0;
+                }
+                
+                if (i==0){
+                    tempEdge2[0] = bodies[a].vertexes[2][0]-tempPoint[0];
+                    tempEdge2[1] = bodies[a].vertexes[2][1]-tempPoint[1];
+                    tempEdge2[2] = 0;
+                }
+                else if (i==1){
+                    tempEdge2[0] = bodies[a].vertexes[3][0]-tempPoint[0];
+                    tempEdge2[1] = bodies[a].vertexes[3][1]-tempPoint[1];
+                    tempEdge2[2] = 0;
+                }
+                else if (i==2){
+                    tempEdge2[0] = bodies[a].vertexes[0][0]-tempPoint[0];
+                    tempEdge2[1] = bodies[a].vertexes[0][1]-tempPoint[1];
+                    tempEdge2[2] = 0;
+                    
+                }
+                else if (i==3){
+                    tempEdge2[0] = bodies[a].vertexes[1][0]-tempPoint[0];
+                    tempEdge2[1] = bodies[a].vertexes[1][1]-tempPoint[1];
+                    tempEdge2[2] = 0;
+                }
+                
+                crossproduct(tempEdge, tempEdge2, crossproductResult);
+                
+                if (crossproductResult[2]>0){
+                    vorzeichen1 = 1;
+                }
+                else{
+                    vorzeichen1 = -1;
+                }
+                
+                validCounter = 0;
+                
+                
+                
+                for (var k=0;k<4;k++){
+                    
+                    tempEdge3[0] = bodies[b].vertexes[k][0] - tempPoint[0];
+                    tempEdge3[1] = bodies[b].vertexes[k][1] - tempPoint[1];
+                    tempEdge3[2] = 0;
+                    
+                    crossproduct(tempEdge, tempEdge3, crossproductResult);
+                    
+                    
+                    if (crossproductResult[2]>0){
+                        vorzeichen2 = 1;
+                    }
+                    else{
+                        vorzeichen2 = -1;
+                    }
+                    
+                    
+                    if (vorzeichen1!=vorzeichen2){
+                        
+                        validCounter++;
+                        
+                    }
+                    
+                }
+                if (validCounter==4){
+                    return true;
+                }
+                return false;
+            }
+            
+            function findSeparatingEdge(a,b){
+                
+                for (var i=0;i<4;i++){
+                    
+                    if (checkifedgevalid(a, i, b)){
+                        
+                        return i;
+                    }
+                    
+                }
+                
+                return -1;
+            }
+            
+            function fillOverlap(i,k){
+                
+                overlaps[i][k].bodya = i;
+                overlaps[i][k].bodyb = k+1;
+                
+            }
+            
+            function initOverlap(){
+                
+                for (var i=0;i<numberBodies*2;i++){
+                    if (intervalsxindex[i]%2==0){
+                        activeOverlapx[(intervalsxindex[i])/2]=1;
+                        for (var k=0;k<numberBodies; k++){
+                            if (activeOverlapx[k]==1 && k!=(intervalsxindex[i])/2){
+                                overlapsx[k][(intervalsxindex[i])/2]=1;
+                                overlapsx[(intervalsxindex[i])/2][k]=1;
+                            }
+                        }
+                    }
+                    else{
+                        activeOverlapx[(intervalsxindex[i]-1)/2]=-1;
+                    }
+                    
+                    if (intervalsyindex[i]%2==0){
+                         activeOverlapy[(intervalsyindex[i])/2]=1;
+                         for (var k=0;k<numberBodies; k++){
+                             if (activeOverlapy[k]==1 && k!=(intervalsyindex[i])/2){
+                                 overlapsy[k][(intervalsyindex[i])/2]=1;
+                                 overlapsy[(intervalsyindex[i])/2][k]=1;
+                             }
+                         }
+                        
+                    }
+                    else{
+                        activeOverlapy[(intervalsyindex[i]-1)/2]=-1;
+                    }
+                   
+                }
+                
+                for (var i=0;i<numberBodies;i++){
+                    for (var k=0;k<(numberBodies-(i+1));k++){
+                        
+                        fillOverlap(i,k);
+                        
+                    }
+                }
+                
+                //text = window.document.getElementById("textField");
+                //text.innerHTML = overlapsx+"</br>"+overlapsy;
                 
             }
             
@@ -284,7 +629,6 @@
                 
                 
             }
-            
             
             function Dxdt(x){
                 
@@ -296,22 +640,16 @@
                 }
             }
             
-            
-            
             function ode(x0, xEnd, len, t0, t1, dxdt){
                 
-                //ode(x0, xFinal, stateSize*numberBodies, t, t+1/24, dxdt);
-               
                 dxdt(x0);
                
                 for (var i=0;i<len;i++){
                     xEnd[i] = x0[i] + xdot[i];
                 }
                 
-                counter++;
             }
             
-                
             function initGL(){
                     
                     var canvas = window.document.getElementById("webGLCanvas");
@@ -357,9 +695,6 @@
                 return shader;
             }
             
-            var mvMatrix;
-            var pMatrix;
-            
             function initShaders(){
                 
                 var fragmentShader = getShader(gl,"shader-fs");
@@ -382,10 +717,10 @@
                 
                 mat4.translate(mvMatrix, mvMatrix, [0,0,-3.0]);
                 
-                var right = 2;//+0.5;
-                var left = -2;//-0.5;
-                var upper = 2;//+0.5;
-                var lower = -2;//-0.5;
+                var right = 20;//+0.5;
+                var left = -20;//-0.5;
+                var upper = 20;//+0.5;
+                var lower = -20;//-0.5;
                 var zFar = 100.0;
                 var zNear = 0.1;
                 pMatrix = new Float32Array(
@@ -404,74 +739,73 @@
                 
             }
            
-           
-           var vertexes = new Float32Array(21);
-           var temp1 = new Array(3);
-           var temp2 = new Array(3);
-           var temp3 = new Array(3);
-           var temp4 = new Array(3);
+            function calcVertexes(){
+               
+               tempCounter=0;
+               
+               for (var i=0; i<numberBodies;i++){
+                   
+                   tempCounter=i*15;
+                   
+                   temp1 = numeric.dot(bodies[i].R, [-1,-1,0]);
+                   temp1 = numeric.add(temp1, bodies[i].x);
+                   temp2 = numeric.dot(bodies[i].R, [1,-1,0]);
+                   temp2 = numeric.add(temp2, bodies[i].x);
+                   temp3 = numeric.dot(bodies[i].R, [1,1,0]);
+                   temp3 = numeric.add(temp3, bodies[i].x);
+                   temp4 = numeric.dot(bodies[i].R, [-1,1,0]);
+                   temp4 = numeric.add(temp4, bodies[i].x);
+                   
+                   bodies[i].vertexes[0]=temp1;
+                   bodies[i].vertexes[1]=temp2;
+                   bodies[i].vertexes[2]=temp3;
+                   bodies[i].vertexes[3]=temp4;
+                   
+                   vertexes[tempCounter+0]=temp1[0];
+                   vertexes[tempCounter+1]=temp1[1];
+                   vertexes[tempCounter+2]=temp1[2];
+                   
+                   vertexes[tempCounter+3]=temp2[0];
+                   vertexes[tempCounter+4]=temp2[1];
+                   vertexes[tempCounter+5]=temp2[2];
+                   
+                   vertexes[tempCounter+6]=temp3[0];
+                   vertexes[tempCounter+7]=temp3[1];
+                   vertexes[tempCounter+8]=temp3[2];
+                   
+                   vertexes[tempCounter+9]=temp4[0];
+                   vertexes[tempCounter+10]=temp4[1];
+                   vertexes[tempCounter+11]=temp4[2];
+                   
+                   vertexes[tempCounter+12]=temp1[0];
+                   vertexes[tempCounter+13]=temp1[1];
+                   vertexes[tempCounter+14]=temp1[2];
+                   tempCounter++;
+                   
+               }
+               
+               gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+               gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
+               
+           }
          
-        function drawScene(){
+            function drawScene(){
                 
                 gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                 
-                temp1 = numeric.dot(bodies[0].R, [-0.5,-0.5,0]);
-                temp1 = numeric.add(temp1, bodies[0].x);
-                
-                temp2 = numeric.dot(bodies[0].R, [0.5,-0.5,0]);
-                temp2 = numeric.add(temp2, bodies[0].x);
-                
-                temp3 = numeric.dot(bodies[0].R, [0.5,0.5,0]);
-                temp3 = numeric.add(temp3, bodies[0].x);
-                
-                temp4 = numeric.dot(bodies[0].R, [-0.5,0.5,0]);
-                temp4 = numeric.add(temp4, bodies[0].x);
-                
-                vertexes[0]=temp1[0];
-                vertexes[1]=temp1[1];
-                vertexes[2]=temp1[2];
-                
-                vertexes[3]=temp2[0];
-                vertexes[4]=temp2[1];
-                vertexes[5]=temp2[2];
-                
-                vertexes[6]=temp3[0];
-                vertexes[7]=temp3[1];
-                vertexes[8]=temp3[2];
-                
-                vertexes[9]=temp4[0];
-                vertexes[10]=temp4[1];
-                vertexes[11]=temp4[2];
-                
-                vertexes[12]=temp1[0];
-                vertexes[13]=temp1[1];
-                vertexes[14]=temp1[2];
-                
-                vertexes[15]=-1;
-                vertexes[16]=-1;
-                vertexes[17]=0;
-                
-                vertexes[18]=1;
-                vertexes[19]=1;
-                vertexes[20]=0;
-                
-               
-               //text = window.document.getElementById("textField");
-               //text.innerHTML = bodies[0].R[0][0]+"; "+bodies[0].R[0][1]+"; "+bodies[0].R[0][2]+"</br>"+bodies[0].R[1][0]+"; "+bodies[0].R[1][1]+"; "+bodies[0].R[1][2]+"</br>"+bodies[0].R[2][0]+"; "+bodies[0].R[2][1]+"; "+bodies[0].R[2][2];
-                //text.innerHTML = temp1+"</br>"+temp2+"</br>"+temp3+"</br>"+temp4;
-                
-                gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
-                gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
-                gl.drawArrays(gl.LINE_STRIP, 0, 5);
+                calcVertexes();
+                for (var i=0;i< numberBodies;i++){
+                    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+                    gl.drawArrays(gl.LINE_STRIP, 5*i, 5);
+                }
                 
             }
            
-           
-            
             function nextFrame(){
                
                 t = 1/24;
+                
+                find_all_collisions();
                 
                 for (var i=0; i<stateSize*numberBodies; i++){
                     x0[i] = xFinal[i];
@@ -481,6 +815,376 @@
                 
                 array_to_bodies(xFinal);
                 
+                
+                updateIntervals();
+                findOverlap();
+                
+                
+                counter++;
+                
+                
+            }
+            
+            function setOverlap(i, k){
+                tempSeparatingEdge = findSeparatingEdge(i, k);
+                if (tempSeparatingEdge!=-1){
+                    overlaps[i][k-(i+1)].bodya = i;
+                    overlaps[i][k-(i+1)].bodyb = k;
+                    overlaps[i][k-(i+1)].bodyWithSeparatingEdge = i;
+                    overlaps[i][k-(i+1)].separatingEdge = tempSeparatingEdge;
+                    overlaps[i][k-(i+1)].collision = 0;
+                    
+                    
+                    return true;
+                }
+                else{
+                    tempSeparatingEdge = findSeparatingEdge(k, i);
+                    if (tempSeparatingEdge!=-1){
+                        overlaps[i][k-(i+1)].bodya = k;
+                        overlaps[i][k-(i+1)].bodyb = i;
+                        overlaps[i][k-(i+1)].bodyWithSeparatingEdge = k;
+                        overlaps[i][k-(i+1)].separatingEdge = tempSeparatingEdge;
+                        
+                        return true;
+                    }
+                    else{
+                        overlaps[i][k-(i+1)].collision = 1;
+                        return false;
+                    }
+                    
+                }
+            }
+            
+            function initEdges(){
+                
+                for (var i=0;i<numberBodies;i++){
+                    for (var k=i+1;k<numberBodies;k++){
+                        setOverlap(i,k);
+                    }
+                }
+                
+
+            }
+            
+            function detectInterpenetratingVertexOfCollision(i,k){
+                
+               
+                if (overlaps[i][k-(i+1)].separatingEdge==3){
+                    tempEdge4[0] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][0]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][0];
+                    tempEdge4[1] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][1]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][1];
+                    tempEdge4[2] = 0;
+                }
+                else{
+                    tempEdge4[0] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge+1][0]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge][0];
+                    tempEdge4[1] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge+1][1]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge][1];
+                    tempEdge4[2] = 0;
+                }
+                
+                if (overlaps[i][k-(i+1)].separatingEdge<2){
+                    tempEdge2[0] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge+2][0] - bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge][0];
+                    tempEdge2[1] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge+2][1] - bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge][1];
+                    tempEdge2[2] = 0;
+                }
+                else if(overlaps[i][k-(i+1)].separatingEdge==2){
+                    tempEdge2[0] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][0]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[2][0];
+                    tempEdge2[1] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][1]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[2][1];
+                    tempEdge2[2] = 0;
+                }
+                else if(overlaps[i][k-(i+1)].separatingEdge==3){
+                    tempEdge2[0] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[1][0]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][0];
+                    tempEdge2[1] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[1][1]-bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][1];
+                    tempEdge2[2] = 0;
+            
+                }
+                                                                                                                                                                                                                                              
+                crossproduct(tempEdge4, tempEdge2, crossproductResult);
+                if (crossproductResult[2]>0){
+                    vorzeichen1 = 1;
+                }
+                else{
+                    vorzeichen1 = -1;
+                }
+                
+                for (var y=0;y<4;y++){
+                    
+                    tempEdge2[0] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge][0] - bodies[overlaps[i][k-(i+1)].bodyb].vertexes[y][0];
+                    tempEdge2[1] = bodies[overlaps[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[overlaps[i][k-(i+1)].separatingEdge][1] - bodies[overlaps[i][k-(i+1)].bodyb].vertexes[y][1];
+                    tempEdge2[2] = 0;
+                    
+                    crossproduct(tempEdge4, tempEdge2, crossproductResult);
+                    if (crossproductResult[2]>0){
+                        vorzeichen2 = 1;
+                    }
+                                                                                                                                                                                                                                              
+                    else{
+                         vorzeichen2 = -1;
+                    }
+                    if (vorzeichen1 != vorzeichen2){
+                       return y;
+                    }
+                    
+                    
+                }
+                
+                
+                return -1;
+                
+            }
+            
+            function computePositionOfInterpenetrationOnVertex(i,k){
+                
+                //tempEdge4 still has the correct edge vertex from the previously called function detectInterpenetratingVertex()
+                
+                tempEdge3[0] = bodies[overlaps[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][0] - bodies[overlaps[i][k-(i+1)].bodya].vertexes[overlaps[i][k-(i+1)].separatingEdge][0];
+                tempEdge3[1] = bodies[overlaps[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][1] - bodies[overlaps[i][k-(i+1)].bodya].vertexes[overlaps[i][k-(i+1)].separatingEdge][1];
+                tempEdge3[2] = 0;
+                
+                crossproduct(tempEdge4, tempEdge3, crossproductResult);
+                
+                var length = tempEdge4[0]*tempEdge4[0]+tempEdge4[1]*tempEdge4[1]+tempEdge4[2]*tempEdge4[2];
+                length = Math.sqrt(length);
+                
+                var length2 = crossproductResult[0]*crossproductResult[0] + crossproductResult[1]*crossproductResult[1]+ crossproductResult[2]*crossproductResult[2];
+                length2 = Math.sqrt(length2);
+                
+                var distance = length2/length;
+                positionOfInterpenetrationOnVertex[0] = bodies[overlaps[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][0]+tempNormalOfEdge[0]*distance;
+                positionOfInterpenetrationOnVertex[1] = bodies[overlaps[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][1]+tempNormalOfEdge[1]*distance;
+                positionOfInterpenetrationOnVertex[2] = 0;
+                
+            }
+            
+            function computeNormalOfPenetratedEdge(i,k){
+                
+                //tempEdge still has the correct edge vertex from the previously called function detectInterpenetratingVertex()
+                
+               
+                
+                tempNormalOfEdge[2] = 0;
+                tempNormalOfEdge[1] = 1;
+                tempNormalOfEdge[0] = -(tempEdge4[1]/tempEdge4[0]);
+                
+                var length = 1 + tempNormalOfEdge[0]*tempNormalOfEdge[0];
+                length = Math.sqrt(length);
+                
+                tempNormalOfEdge[1] = 1/length;
+                tempNormalOfEdge[0] = tempNormalOfEdge[0]/length;
+                
+                //tempEdge2 gets the starting point from which the edge goes out
+                //tempEdge2 = bodies[overlaps[i][k-(i+1)].bodya].vertexes[overlaps[i][k-(i+1)].separatingEdge];
+                tempEdge3[0] = bodies[overlaps[i][k-(i+1)].bodya].x[0] - bodies[overlaps[i][k-(i+1)].bodya].vertexes[overlaps[i][k-(i+1)].separatingEdge][0];
+                tempEdge3[1] = bodies[overlaps[i][k-(i+1)].bodya].x[1] - bodies[overlaps[i][k-(i+1)].bodya].vertexes[overlaps[i][k-(i+1)].separatingEdge][1];
+                tempEdge3[2] = 0;
+                
+                crossproduct(tempEdge4, tempEdge3, crossproductResult);
+                
+                tempEdge3[0] = tempNormalOfEdge[0];
+                tempEdge3[1] = tempNormalOfEdge[1];
+                tempEdge3[2] = 0;
+                
+                crossproduct(tempEdge4, tempEdge3, crossproductResult2);
+                
+
+                
+                if ((crossproductResult[2]>0 && crossproductResult2[2]>0) || (crossproductResult[2]<0 && crossproductResult2[2]<0)){
+                    tempNormalOfEdge[0]*=-1;
+                    tempNormalOfEdge[1]*=-1;
+                    return;
+                }
+                else{
+                    return;
+                }
+                
+                
+                
+            }
+            
+            function pt_velocity(i,p, velocityOfPointOnBody){
+                
+                tempArray[0] = p[0] - bodies[i].x[0];
+                tempArray[1] = p[1] - bodies[i].x[1];
+                tempArray[2] = 0;
+                
+                crossproduct(bodies[i].omega, tempArray, tempArray2);
+                
+                velocityOfPointOnBody[0] = bodies[i].v[0] + tempArray2[0];
+                velocityOfPointOnBody[1] = bodies[i].v[1] + tempArray2[1];
+                velocityOfPointOnBody[2] = 0;
+                
+            }
+            
+            function dotproduct(a,b){
+                
+                return a[0]*b[0]+a[1]*b[1];
+            }
+            
+            function vectorminus(a,b,r){
+                
+                r[0] = a[0]-b[0];
+                r[1] = a[1]-b[1];
+                r[2] = 0;
+                
+            }
+            
+            function colliding(c){
+                
+                pt_velocity(i,c.p,padot);
+                pt_velocity(i,c.p,pbdot);
+                
+                vectorminus(padot, pbdot, tempArray);
+                
+                vrel = dotproduct(c.n, tempArray);
+                
+                if (vrel>0.000001){
+                    return false;
+                }
+                else if (vrel>-0.000001){
+                    return false;
+                }
+                else{
+                    return true;
+                }
+                
+            }
+            
+            function collision(c){
+                
+                pt_velocity(c.a, c.p, padot);
+                pt_velocity(c.b, c.p, pbdot);
+                vectorminus(c.p, bodies[c.a].x, ra);
+                vectorminus(c.p, bodies[c.b].x, rb);
+                vectorminus(padot, pbdot, tempArray);
+                vrel = dotproduct(c.n, tempArray);
+                numerator = -(1+epsilon)*vrel;
+                
+                
+                term1 = 1/(bodies[c.a].mass);
+                term2 = 1/(bodies[c.b].mass);
+                
+                crossproduct(ra, c.n, tempArray);
+                crossproduct(numeric.dot(bodies[c.a].Iinv,tempArray),ra, tempArray);
+                term3 = dotproduct(c.n, tempArray);
+                
+                crossproduct(rb, c.n, tempArray);
+                crossproduct(numeric.dot(bodies[c.b].Iinv,tempArray),rb, tempArray);
+                term4 = dotproduct(c.n, tempArray);
+                
+                j = numerator/(term1+term2+term3+term4);
+                force[0] = j*c.n[0];
+                force[1] = j*c.n[1];
+                force[2] = 0;
+                
+                bodies[c.a].P[0] = bodies[c.a].P[0] + force[0];
+                bodies[c.a].P[1] = bodies[c.a].P[1] + force[1];
+                
+                bodies[c.b].P[0] = bodies[c.b].P[0] - force[0];
+                bodies[c.b].P[1] = bodies[c.b].P[1] - force[1];
+                
+                
+                crossproduct(ra, force, tempArray);
+                bodies[c.a].L[0] = bodies[c.a].L[0] + tempArray[0];
+                bodies[c.a].L[1] = bodies[c.a].L[1] + tempArray[1];
+                bodies[c.a].L[2] = bodies[c.a].L[2] + tempArray[2];
+                
+                crossproduct(rb, force, tempArray);
+                bodies[c.b].L[0] = bodies[c.b].L[0] - tempArray[0];
+                bodies[c.b].L[1] = bodies[c.b].L[1] - tempArray[1];
+                bodies[c.b].L[2] = bodies[c.b].L[2] - tempArray[2];
+                
+                bodies[c.a].v[0] = bodies[c.a].P[0] / bodies[c.a].mass;
+                bodies[c.a].v[1] = bodies[c.a].P[1] / bodies[c.a].mass;
+                
+                bodies[c.b].v[0] = bodies[c.b].P[0] / bodies[c.b].mass;
+                bodies[c.b].v[1] = bodies[c.b].P[1] / bodies[c.b].mass;
+                
+                bodies[c.a].omega = numeric.dot(bodies[c.a].Iinv, bodies[c.a].L );
+                bodies[c.b].omega = numeric.dot(bodies[c.b].Iinv, bodies[c.b].L );
+                
+                
+            }
+            
+            function find_all_collisions(){
+                
+                var had_collision;
+                
+                do{
+                    had_collision = false;
+                    
+                    for (var i = 0;i<collisionCount;i++){
+                        
+                        
+                        if (colliding(collisions[i])){
+                            
+                            collision(collisions[i]);
+                            
+                            
+                            //had_collision = true;
+                            
+                        }
+                    }
+                }
+                while(had_collision == true);
+                
+                bodies_to_array(xFinal);
+                collisionCount=0;
+            }
+            
+            function initCollision(i,k){
+                
+                tempInterpenetratingVertex = detectInterpenetratingVertexOfCollision(i,k);
+                computeNormalOfPenetratedEdge(i,k);
+                computePositionOfInterpenetrationOnVertex(i,k);
+                contact = new Contact();
+                contact.a = overlaps[i][k-(i+1)].bodya;
+                contact.b = overlaps[i][k-(i+1)].bodyb;
+                contact.p = positionOfInterpenetrationOnVertex.slice(0);
+                contact.n = tempNormalOfEdge.slice(0);
+                collisions[collisionCount] = contact;
+                
+                
+                
+                
+                
+            }
+            
+            function detectCollision(i, k){
+                
+                if (overlaps[i][k-(i+1)].collision==0){
+                    
+                    
+                
+                        tempedgeStillValid = checkifedgevalid(overlaps[i][k-(i+1)].bodya, overlaps[i][k-(i+1)].separatingEdge, overlaps[i][k-(i+1)].bodyb);
+                        
+                        //text = window.document.getElementById("textField");
+                        //text.innerHTML = "maybe collision between "+i+" and "+k+" but edge "+overlaps[i][k-(i+1)].separatingEdge+" on body "+overlaps[i][k-(i+1)].bodya+" still valid";
+                        
+                        if (!tempedgeStillValid){
+                            
+                            newEdgeFound = setOverlap(i,k);
+                            
+                            if (!newEdgeFound){
+                                
+                                initCollision(i,k);
+                                
+                                collisionCount++;
+                                
+                            }
+                            
+                        }
+                        
+                }
+                else{
+                    
+                    setOverlap(i, k);
+                    if (overlaps[i][k-(i+1)].collision==1){
+                    
+                    //initCollision(i,k);
+                    
+                    
+                    }
+
+
+                }
             }
             
             function webGLStart(){
@@ -489,13 +1193,17 @@
                 initGL();
                 initShaders();
                 initBody();
+                initIntervals();
+                calcVertexes();
+                initEdges();
+                
                 gl.clearColor(0.0, 0.0, 0.0, 1.0);// Hintergrund löschen in Farbe 0
                 bodies_to_array(xFinal);
                 
                 
                 canvas = document.getElementById("webGLCanvas");
                                                                                                  
-                g_DrawInterval = setInterval(nextFrame,10);
+                g_DrawInterval = setInterval(nextFrame,20);
                                                                                                  
                 var renderLoop = function() {
                             requestAnimFrame(renderLoop);
