@@ -11,6 +11,11 @@
             <script type="text/javascript" src="rigidBody.js"></script>
             <script type="text/javascript" src="BoundingBoxOverlap.js"></script>
             <script type="text/javascript" src="Contact.js"></script>
+            <script type="text/javascript">
+            var numberBodies = 10;
+            </script>
+            <script type="text/javascript" src="CollisionHandling.js"></script>
+            
             
             
             <script id="shader-fs" type="x-shader/x-fragment">
@@ -39,80 +44,46 @@
                 
             var mvMatrix;
             var pMatrix;
-                
             var counter=0;
-            var numberBodies = 10;
             var stateSize = 13;
-               
-            bodies = new Array(numberBodies);
+            var stateVector = new Array(numberBodies*stateSize);
+            var xdot = new Array(stateSize);
+            var x0 = new Array(stateSize*numberBodies);
+            var xFinal = new Array(stateSize*numberBodies);
+            var collisions = new Array(100);
+            var vertexBuffer;
+            var floorBuffer;
+            qtemp = new Quaternion();
+            var vertexes = new Float32Array(15*numberBodies+6);
+            var floorVertex = new Float32Array(6);
+            floorVertex[0]=-50;
+            floorVertex[1]=-10;
+            floorVertex[2]=0;
+            floorVertex[3]=50;
+            floorVertex[4]=-10;
+            floorVertex[5]=0;
+            var bodies = new Array(numberBodies);
             for (var i=0;i<numberBodies+1;i++){
                    bodies[i] = new rigidBody();
                    bodies[i].init();
             }
             
             bodies[0].x[0]=-15.0;
-            bodies[0].x[1]=0;
+            bodies[0].x[1]=0.0;
             bodies[0].x[2]=0;
             
             for (var i=1;i<10;i++){
-                bodies[i].x[0]=-11+i*2.2;
+                bodies[i].x[0]=-11+i*2.1;
                 bodies[i].x[1]=0;
                 bodies[i].x[2]=0;
             }
             
-            
-            
-            stateVector = new Array(numberBodies*stateSize);
-            xdot = new Array(stateSize);
-            x0 = new Array(stateSize*numberBodies);
-            xFinal = new Array(stateSize*numberBodies);
-            collisions = new Array(100);
-            
-            var vertexBuffer;
-            
-            qtemp = new Quaternion();
-            var vertexes = new Float32Array(15*numberBodies);
-            
-            var tempCounter=0;
-            var sqrt2 = Math.sqrt(2);
-            var tempSwapValue;
-            var tempSwapIndex;
-            
-            
-            var collisionCount = 0;
-            
-            var tempEdge = new Array(3);
-            var tempEdge2 = new Array(3);
-            var tempEdge3 = new Array(3);
-            var tempEdge4 = new Array(3);
-            var tempPoint = new Array(3);
-            var tempPoint2 = new Array(3);
-            var crossproductResult = new Array(3);
-            var crossproductResult2 = new Array(3);
-            var tempNormalOfEdge = new Array(3);
-            var positionOfInterpenetrationOnVertex = new Array(3);
-            var vorzeichen1 = 0;
-            var vorzeichen2 = 0;
-            var validCounter = 0;
-            var tempSeparatingEdge = 0;
-            var tempedgeStillValid = false;
-            var newEdgeFound = false;
-            var tempInterpenetratingVertex = -1;
-            var tempArray = new Array(3);
-            var tempArray2 = new Array(3);
-            var padot = new Array(3);
-            var pbdot = new Array(3);
-            var ra = new Array(3);
-            var rb = new Array(3);
-            var force = new Array(3);
-            var vrel;
-            var numerator;
-            var epsilon = 1.05;
-            var term1;
-            var term2;
-            var term3;
-            var term4;
-            var j;
+            function initForces(){
+                
+                bodies[0].force = [0.004,-0.0000,0];
+                crossproduct(bodies[0].force, [0.00,-0.3,0], bodies[0].torque);
+                
+            }
             
             function state_to_array(x, index){
                 
@@ -269,378 +240,10 @@
                 
             }
             
-            function crossproduct(vec1, vec2, vec3){
-                
-                vec3[0] = vec1[1]*vec2[2]-vec1[2]*vec2[1];
-                vec3[1] = vec1[2]*vec2[0]-vec1[0]*vec2[2];
-                vec3[2] = vec1[0]*vec2[1]-vec1[1]*vec2[0];
-                
-            }
-            
-            function initForces(){
-                
-                bodies[0].force = [0.0003,-0.0000,0];
-                crossproduct(bodies[0].force, [0.00,-0.3,0], bodies[0].torque);
-               
-            }
-            
-            xAxisOverlap = new Array(numberBodies);
-            yAxisOverlap = new Array(numberBodies);
-            for (var i=0;i<numberBodies;i++){
-                xAxisOverlap[i] = new Array(numberBodies-(i+1));
-                yAxisOverlap[i] = new Array(numberBodies-(i+1));
-                for (var k=0;k<numberBodies-(i+1);k++){
-                    xAxisOverlap[i][k]=-1;
-                    yAxisOverlap[i][k]=-1;
-                }
-            }
-            var tempIndex1;
-            var tempIndex2;
-            var tempBodya;
-            var tempBodyb;
-            function setxAxisOverlap(i,k){
-                
-                if (i%2==0){
-                    tempBodya = i/2;
-                    tempBodyb = (k-1)/2;
-                }
-                else{
-                    tempBodya = (i-1)/2;
-                    tempBodyb = k/2;
-                }
-                
-                
-                
-                if (tempBodya<tempBodyb){
-                    tempIndex1 = tempBodya;
-                    tempIndex2 = tempBodyb;
-                    
-                }
-                else{
-                    tempIndex1 = tempBodyb;
-                    tempIndex2 = tempBodya;
-                }
-                
-                
-                if (xAxisOverlap[tempIndex1][tempIndex2-(tempIndex1+1)]==-1){
-                    xAxisOverlap[tempIndex1][tempIndex2-(tempIndex1+1)]=1;
-                }
-                else{
-                    xAxisOverlap[tempIndex1][tempIndex2-(tempIndex1+1)]=-1;
-                }
-                
-            }
-            
-            function setyAxisOverlap(i,k){
-                
-                if (i%2==0){
-                    tempBodya = i/2;
-                    tempBodyb = (k-1)/2;
-                }
-                else{
-                    tempBodya = (i-1)/2;
-                    tempBodyb = k/2;
-                }
-                
-                
-                
-                if (tempBodya<tempBodyb){
-                    tempIndex1 = tempBodya;
-                    tempIndex2 = tempBodyb;
-                    
-                }
-                else{
-                    tempIndex1 = tempBodyb;
-                    tempIndex2 = tempBodya;
-                }
-                
-                
-                if (yAxisOverlap[tempIndex1][tempIndex2-(tempIndex1+1)]==-1){
-                    yAxisOverlap[tempIndex1][tempIndex2-(tempIndex1+1)]=1;
-                }
-                else{
-                    yAxisOverlap[tempIndex1][tempIndex2-(tempIndex1+1)]=-1;
-                }
-                
-            }
-           
-            function findBoundingBoxOverlap(){
-                
-                for (var i=0;i<numberBodies-1;i++){
-                    for (var k=i+1;k<numberBodies;k++){
-                        if (xAxisOverlap[i][k-(i+1)]==1){
-                            if (yAxisOverlap[i][k-(i+1)]==1){
-                                
-                                checkIfBodiesCollided(i,k);
-                                
-                            }
-                        }
-                    }
-                }
-                
-                
-            }
-            
-            xAxisIntervalsIndex = new Array(numberBodies*2);
-            xAxisIntervalsValues = new Array(numberBodies*2);
-            yAxisIntervalsIndex = new Array(numberBodies*2);
-            yAxisIntervalsValues = new Array(numberBodies*2);
-            
-            function insertionSortBoundingBoxes(init){
-                //text = window.document.getElementById("textField");
-                //text.innerHTML = "nein";
-                for (var i=1; i<numberBodies*2;i++){
-                    for (var k=i; (k>0 && xAxisIntervalsValues[k]<xAxisIntervalsValues[k-1]); k--){
-                        tempSwapValue = xAxisIntervalsValues[k-1];
-                        xAxisIntervalsValues[k-1] = xAxisIntervalsValues[k];
-                        xAxisIntervalsValues[k] = tempSwapValue;
-                        
-                        tempSwapIndex = xAxisIntervalsIndex[k-1];
-                        xAxisIntervalsIndex[k-1] = xAxisIntervalsIndex[k];
-                        xAxisIntervalsIndex[k] = tempSwapIndex;
-                        
-                        if (init==0){
-                            if ((xAxisIntervalsIndex[k-1]+xAxisIntervalsIndex[k])%2==1){
-                                setxAxisOverlap(xAxisIntervalsIndex[k-1], xAxisIntervalsIndex[k]);
-                            }
-                        }
-                        
-                    }
-                }
-                
-                
-                for (var i=1; i<numberBodies*2;i++){
-                    for (var k=i; (k>0 && yAxisIntervalsValues[k]<yAxisIntervalsValues[k-1]); k--){
-                        tempSwapValue = yAxisIntervalsValues[k-1];
-                        yAxisIntervalsValues[k-1] = yAxisIntervalsValues[k];
-                        yAxisIntervalsValues[k] = tempSwapValue;
-                        
-                        tempSwapIndex = yAxisIntervalsIndex[k-1];
-                        yAxisIntervalsIndex[k-1] = yAxisIntervalsIndex[k];
-                        yAxisIntervalsIndex[k] = tempSwapIndex;
-                        
-                        if (init==0){
-                            if ((yAxisIntervalsIndex[k-1]+yAxisIntervalsIndex[k])%2==1){
-                                setyAxisOverlap(yAxisIntervalsIndex[k-1], yAxisIntervalsIndex[k]);
-                            }
-                        }
-                        
-                    }
-                }
-            }
-            
-            function updateAxisIntervalsOfRigidBodies(){
-                
-                for (var i=0; i<numberBodies*2;i++){
-                    
-                    if (xAxisIntervalsIndex[i]%2==0){
-                        xAxisIntervalsValues[i] = bodies[xAxisIntervalsIndex[i]/2].x[0]-sqrt2;
-                    }
-                    else{
-                        xAxisIntervalsValues[i] = bodies[(xAxisIntervalsIndex[i]-1)/2].x[0]+sqrt2;
-                    }
-                    
-                    if (yAxisIntervalsIndex[i]%2==0){
-                        yAxisIntervalsValues[i] = bodies[(yAxisIntervalsIndex[i]/2)].x[1]-sqrt2;
-                    }
-                    else{
-                        yAxisIntervalsValues[i] = bodies[((yAxisIntervalsIndex[i]-1)/2)].x[1]+sqrt2;
-                    }
-                    
-                }
-                
-                insertionSortBoundingBoxes(0);
-                
-                
-            }
-            
-            function initIntervalsForBoundingBoxCheck(){
-                
-                for (var i=0;i<numberBodies;i++){
-                    
-                    xAxisIntervalsIndex[i*2+0] = i*2;
-                    xAxisIntervalsIndex[i*2+1] = i*2+1;
-                    yAxisIntervalsIndex[i*2+0] = i*2;
-                    yAxisIntervalsIndex[i*2+1] = i*2+1;
-                    
-                    xAxisIntervalsValues[i*2+0] = bodies[i].x[0]-sqrt2;
-                    xAxisIntervalsValues[i*2+1] = bodies[i].x[0]+sqrt2;
-                    yAxisIntervalsValues[i*2+0] = bodies[i].x[1]-sqrt2;
-                    yAxisIntervalsValues[i*2+1] = bodies[i].x[1]+sqrt2;
-                    
-                }
-                
-                insertionSortBoundingBoxes(1);
-                findInitialAxisOverlap();
-                
-                
-                //text = window.document.getElementById("textField");
-                //text.innerHTML = yAxisIntervalsValues+"</br>"+xAxisIntervalsValues;
-                
-            }
-            
-            function checkifedgevalid(a, i, b){
-                
-                tempPoint = bodies[a].vertexes[i];
-                
-                if (i==3){
-                    tempEdge[0] = bodies[a].vertexes[0][0]-bodies[a].vertexes[i][0];
-                    tempEdge[1] = bodies[a].vertexes[0][1]-bodies[a].vertexes[i][1];
-                    tempEdge[2] = 0;
-                }
-                else{
-                    tempEdge[0] = bodies[a].vertexes[i+1][0]-bodies[a].vertexes[i][0];
-                    tempEdge[1] = bodies[a].vertexes[i+1][1]-bodies[a].vertexes[i][1];
-                    tempEdge[2] = 0;
-                }
-                
-                
-                if (i==0){
-                    tempEdge2[0] = bodies[a].vertexes[2][0]-tempPoint[0];
-                    tempEdge2[1] = bodies[a].vertexes[2][1]-tempPoint[1];
-                    tempEdge2[2] = 0;
-                }
-                else if (i==1){
-                    tempEdge2[0] = bodies[a].vertexes[3][0]-tempPoint[0];
-                    tempEdge2[1] = bodies[a].vertexes[3][1]-tempPoint[1];
-                    tempEdge2[2] = 0;
-                }
-                else if (i==2){
-                    tempEdge2[0] = bodies[a].vertexes[0][0]-tempPoint[0];
-                    tempEdge2[1] = bodies[a].vertexes[0][1]-tempPoint[1];
-                    tempEdge2[2] = 0;
-                    
-                }
-                else if (i==3){
-                    tempEdge2[0] = bodies[a].vertexes[1][0]-tempPoint[0];
-                    tempEdge2[1] = bodies[a].vertexes[1][1]-tempPoint[1];
-                    tempEdge2[2] = 0;
-                }
-                
-                crossproduct(tempEdge, tempEdge2, crossproductResult);
-                
-                if (crossproductResult[2]>0){
-                    vorzeichen1 = 1;
-                }
-                else{
-                    vorzeichen1 = -1;
-                }
-                
-                validCounter = 0;
-                
-                
-                for (var k=0;k<4;k++){
-                    
-                    tempEdge3[0] = bodies[b].vertexes[k][0] - tempPoint[0];
-                    tempEdge3[1] = bodies[b].vertexes[k][1] - tempPoint[1];
-                    tempEdge3[2] = 0;
-                    
-                    crossproduct(tempEdge, tempEdge3, crossproductResult);
-                    
-                    
-                    if (crossproductResult[2]>0){
-                        vorzeichen2 = 1;
-                    }
-                    else{
-                        vorzeichen2 = -1;
-                    }
-                    
-                    
-                    if (vorzeichen1!=vorzeichen2){
-                        
-                        validCounter++;
-                        
-                    }
-                    
-                }
-                if (validCounter==4){
-                    return true;
-                }
-                
-                return false;
-            }
-            
-            function findSeparatingEdgeBetweenBodies(a,b){
-                
-                for (var i=0;i<4;i++){
-                    
-                    if (checkifedgevalid(a, i, b)){
-                        return i;
-                    }
-                    
-                }
-                
-                return -1;
-            }
-           
-            var tempActiveSetx = new Array(numberBodies);
-            var tempActiveSety = new Array(numberBodies);
-            for (var i=0;i<numberBodies;i++){
-                tempActiveSetx[i] = -1;
-                tempActiveSety[i] = -1;
-            }
-            
-            function findInitialAxisOverlap(){
-                
-                //"xAxisIntervalsIndex[i])/2" is the index in bodies[] of the corresponding rigid body
-                //this algorithm is an active set method to find overlaps of the rigid bodies on the x and y axis
-                
-                
-                for (var i=0; i<numberBodies*2;i++){
-                    if (xAxisIntervalsIndex[i]%2==0){
-                        tempActiveSetx[(xAxisIntervalsIndex[i])/2]=1;
-                        for (var k=0;k<numberBodies; k++){
-                            if (tempActiveSetx[k]==1 && k!=(xAxisIntervalsIndex[i])/2){
-                                
-                                if (((xAxisIntervalsIndex[i])/2)>k){
-                                    xAxisOverlap[k][((xAxisIntervalsIndex[i])/2)-(k+1)]=1;
-                                }
-                                else{
-                                    xAxisOverlap[((xAxisIntervalsIndex[i])/2)][k-(((xAxisIntervalsIndex[i])/2)+1)]=1;
-                                }
-                                
-                            }
-                        }
-                    }
-                    else{
-                        tempActiveSetx[(xAxisIntervalsIndex[i]-1)/2]=-1;
-                    }
-                    
-                    if (yAxisIntervalsIndex[i]%2==0){
-                        tempActiveSety[(yAxisIntervalsIndex[i])/2]=1;
-                        for (var k=0;k<numberBodies; k++){
-                            if (tempActiveSety[k]==1 && k!=(yAxisIntervalsIndex[i])/2){
-                                
-                                if (((yAxisIntervalsIndex[i])/2)>k){
-                                    yAxisOverlap[k][((yAxisIntervalsIndex[i])/2)-(k+1)]=1;
-                                }
-                                else{
-                                    yAxisOverlap[((yAxisIntervalsIndex[i])/2)][k-(((yAxisIntervalsIndex[i])/2)-1)];
-                                    
-                                }
-                            }
-                        }
-                        
-                    }
-                    else{
-                        tempActiveSety[(yAxisIntervalsIndex[i]-1)/2]=-1;
-                    }
-                }
-                
-                for (var i=0;i<numberBodies;i++){
-                    for (var k=0;k<(numberBodies-(i+1));k++){
-                        
-                        separationInformation[i][k].bodya = i;
-                        separationInformation[i][k].bodyb = k+1;
-                        
-                    }
-                }
-                
-                
-            }
             
             function compute_force_and_torque(i){
                 
+                bodies[i].force[1]-=0.000009;
                 
                 
             }
@@ -732,10 +335,10 @@
                 
                 mat4.translate(mvMatrix, mvMatrix, [0,0,-3.0]);
                 
-                var right = 20;//+0.5;
-                var left = -20;//-0.5;
-                var upper = 20;//+0.5;
-                var lower = -20;//-0.5;
+                var right = 30;//+0.5;
+                var left = -30;//-0.5;
+                var upper = 30;//+0.5;
+                var lower = -30;//-0.5;
                 var zFar = 100.0;
                 var zNear = 0.1;
                 pMatrix = new Float32Array(
@@ -751,6 +354,7 @@
                 gl.uniformMatrix4fv(pUniform, false, pMatrix);
                 
                 vertexBuffer = gl.createBuffer();
+                floorBuffer = gl.createBuffer();
                 
             }
             
@@ -803,8 +407,18 @@
                    
                }
                
+               vertexes[numberBodies*15+0] = -30;
+               vertexes[numberBodies*15+1] = -10;
+               vertexes[numberBodies*15+2] = 0;
+               
+               vertexes[numberBodies*15+3] = 30;
+               vertexes[numberBodies*15+4] = -10;
+               vertexes[numberBodies*15+5] = 0;
+               
+               
                gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
                gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
+               
                
            }
          
@@ -813,32 +427,28 @@
                 gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                 
                 calcVertexes();
-                for (var i=0;i< numberBodies;i++){
+                for (var i=0;i<numberBodies;i++){
                     gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
                     gl.drawArrays(gl.LINE_STRIP, 5*i, 5);
+                    
+                    if (i==numberBodies-1){
+                        gl.drawArrays(gl.LINE_STRIP,5*i+5,2);
+                    }
                 }
                 
-            }
-           
-            function updateBoundingBoxes(){
                 
-                updateAxisIntervalsOfRigidBodies();
-                findBoundingBoxOverlap();
-               
             }
            
             function nextFrame(){
                
                 t = 1/24;
                 
-                
                 for (var i=0; i<stateSize*numberBodies; i++){
                     x0[i] = xFinal[i];
                 }
                 
-                if (counter>200){
+                if (counter>40){
                     bodies[0].force[0]=0;
-                    bodies[0].force[1]=0;
                     bodies[0].force[2]=0;
                     bodies[0].torque[0]=0;
                     bodies[0].torque[1]=0;
@@ -849,416 +459,12 @@
                 
                 array_to_bodies(xFinal);
                 
-                updateAxisIntervalsOfRigidBodies();
-                
-                findBoundingBoxOverlap();
-                
-                find_all_collisions();
-                
-                
-                text = window.document.getElementById("textField");
-                text.innerHTML = counter;
-                
-                
-               
-                
-                counter++;
-                
-                
-            }
-            
-            var separationInformation = new Array(numberBodies);
-            for (var i=0;i<numberBodies;i++){
-                separationInformation[i] = new Array(numberBodies-(i+1));
-                for (var k=0;k<numberBodies-(i+1);k++){
-                    separationInformation[i][k] = new InformationOfSeparation();
-                }
-            }
-            var tempSeparatingEdge2 = 0;
-            
-            function fillSeparationInformationBetweenBodies(i,k){
-                
-                tempSeparatingEdge2 = findSeparatingEdgeBetweenBodies(i,k);
-                
-                if (tempSeparatingEdge2!=-1){
-                    separationInformation[i][k-(i+1)].bodya = i;
-                    separationInformation[i][k-(i+1)].bodyb = k;
-                    separationInformation[i][k-(i+1)].bodyWithSeparatingEdge = i;
-                    separationInformation[i][k-(i+1)].separatingEdge = tempSeparatingEdge2;
-                    separationInformation[i][k-(i+1)].collision = 0;
-                    return true;
-                }
-                else{
-                    tempSeparatingEdge2 = findSeparatingEdgeBetweenBodies(k, i);
-                    if (tempSeparatingEdge2!=-1){
-                        separationInformation[i][k-(i+1)].bodya = k;
-                        separationInformation[i][k-(i+1)].bodyb = i;
-                        separationInformation[i][k-(i+1)].bodyWithSeparatingEdge = k;
-                        separationInformation[i][k-(i+1)].separatingEdge = tempSeparatingEdge2;
-                        return true;
-                    }
-                    else{
-                        
-                        separationInformation[i][k-(i+1)].collision = 1;
-                        
-                        return false;
-                    }
-                    
-                }
-                
-            }
-            
-            function initEdges(){
-                
-                for (var i=0;i<numberBodies;i++){
-                    for (var k=i+1;k<numberBodies;k++){
-                        setOverlap(i,k);
-                    }
-                }
-                
-
-            }
-            
-            function initSeparationInformation(){
-                for (var i=0;i<numberBodies;i++){
-                    for (var k=i+1;k<numberBodies;k++){
-                        
-                        fillSeparationInformationBetweenBodies(i,k);
-                    }
-                }
-            }
-            
-            var alreadydone=false;
-            
-            function detectInterpenetratingVertexOfCollision(i,k){
-                
-                
-                if (separationInformation[i][k-(i+1)].separatingEdge==3){
-                    tempEdge4[0] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][0]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][0];
-                    tempEdge4[1] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][1]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][1];
-                    tempEdge4[2] = 0;
-                }
-                else{
-                    tempEdge4[0] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge+1][0]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge][0];
-                    tempEdge4[1] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge+1][1]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge][1];
-                    tempEdge4[2] = 0;
-                }
-                
-                
-                if (separationInformation[i][k-(i+1)].separatingEdge<2){
-                    tempEdge2[0] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge+2][0] - bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge][0];
-                    tempEdge2[1] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge+2][1] - bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge][1];
-                    tempEdge2[2] = 0;
-                }
-                else if(separationInformation[i][k-(i+1)].separatingEdge==2){
-                    tempEdge2[0] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][0]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[2][0];
-                    tempEdge2[1] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[0][1]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[2][1];
-                    tempEdge2[2] = 0;
-                }
-                else if(separationInformation[i][k-(i+1)].separatingEdge==3){
-                    tempEdge2[0] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[1][0]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][0];
-                    tempEdge2[1] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[1][1]-bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[3][1];
-                    tempEdge2[2] = 0;
-            
-                }
-                                                                                                                                                                                                                                              
-                crossproduct(tempEdge4, tempEdge2, crossproductResult);
-                if (crossproductResult[2]>0){
-                    vorzeichen1 = 1;
-                }
-                else{
-                    vorzeichen1 = -1;
-                }
-                
-                for (var y=0;y<4;y++){
-                    
-                    tempEdge2[0] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge][0] - bodies[separationInformation[i][k-(i+1)].bodyb].vertexes[y][0];
-                    tempEdge2[1] = bodies[separationInformation[i][k-(i+1)].bodyWithSeparatingEdge].vertexes[separationInformation[i][k-(i+1)].separatingEdge][1] - bodies[separationInformation[i][k-(i+1)].bodyb].vertexes[y][1];
-                    tempEdge2[2] = 0;
-                    
-                    crossproduct(tempEdge4, tempEdge2, crossproductResult);
-                    if (crossproductResult[2]>0){
-                        vorzeichen2 = 1;
-                    }
-                                                                                                                                                                                                                                              
-                    else{
-                         vorzeichen2 = -1;
-                    }
-                    if (vorzeichen1 != vorzeichen2){
-                       return y;
-                    }
-                    
-                    
-                }
-                
-                
-                return -1;
-                
-            }
-            
-            function computePositionOfInterpenetrationOnVertex(i,k){
-                
-                //tempEdge4 still has the correct edge vertex from the previously called function detectInterpenetratingVertex()
-                
-                tempEdge3[0] = bodies[separationInformation[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][0] - bodies[separationInformation[i][k-(i+1)].bodya].vertexes[separationInformation[i][k-(i+1)].separatingEdge][0];
-                tempEdge3[1] = bodies[separationInformation[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][1] - bodies[separationInformation[i][k-(i+1)].bodya].vertexes[separationInformation[i][k-(i+1)].separatingEdge][1];
-                tempEdge3[2] = 0;
-                
-                crossproduct(tempEdge4, tempEdge3, crossproductResult);
-                
-                var length = tempEdge4[0]*tempEdge4[0]+tempEdge4[1]*tempEdge4[1]+tempEdge4[2]*tempEdge4[2];
-                length = Math.sqrt(length);
-                
-                var length2 = crossproductResult[0]*crossproductResult[0] + crossproductResult[1]*crossproductResult[1]+ crossproductResult[2]*crossproductResult[2];
-                length2 = Math.sqrt(length2);
-                
-                var distance = length2/length;
-                positionOfInterpenetrationOnVertex[0] = bodies[separationInformation[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][0]+tempNormalOfEdge[0]*distance;
-                positionOfInterpenetrationOnVertex[1] = bodies[separationInformation[i][k-(i+1)].bodyb].vertexes[tempInterpenetratingVertex][1]+tempNormalOfEdge[1]*distance;
-                positionOfInterpenetrationOnVertex[2] = 0;
-                
-            }
-            
-            function computeNormalOfPenetratedEdge(i,k){
-                
-                //tempEdge still has the correct edge vertex from the previously called function detectInterpenetratingVertex()
-                
-                if(tempEdge4[0]!=0){
-                    tempNormalOfEdge[2] = 0;
-                    tempNormalOfEdge[1] = 1;
-                    tempNormalOfEdge[0] = -(tempEdge4[1]/tempEdge4[0]);
-                }
-                else{
-                    tempNormalOfEdge[2] = 0;
-                    tempNormalOfEdge[1] = -(tempEdge4[0]/tempEdge4[1]);
-                    tempNormalOfEdge[0] = 1;
-                }
-                
-                
-                
-                
-                var length = 1 + tempNormalOfEdge[0]*tempNormalOfEdge[0];
-                length = Math.sqrt(length);
-                
-                tempNormalOfEdge[1] = tempNormalOfEdge[1]/length;
-                tempNormalOfEdge[0] = tempNormalOfEdge[0]/length;
-                
-                //tempEdge2 gets the starting point from which the edge goes out
-                //tempEdge2 = bodies[overlaps[i][k-(i+1)].bodya].vertexes[overlaps[i][k-(i+1)].separatingEdge];
-                tempEdge3[0] = bodies[separationInformation[i][k-(i+1)].bodya].x[0] - bodies[separationInformation[i][k-(i+1)].bodya].vertexes[separationInformation[i][k-(i+1)].separatingEdge][0];
-                tempEdge3[1] = bodies[separationInformation[i][k-(i+1)].bodya].x[1] - bodies[separationInformation[i][k-(i+1)].bodya].vertexes[separationInformation[i][k-(i+1)].separatingEdge][1];
-                tempEdge3[2] = 0;
-                
-                crossproduct(tempEdge4, tempEdge3, crossproductResult);
-                
-                tempEdge3[0] = tempNormalOfEdge[0];
-                tempEdge3[1] = tempNormalOfEdge[1];
-                tempEdge3[2] = 0;
-                
-                crossproduct(tempEdge4, tempEdge3, crossproductResult2);
-                
-
-                
-                if ((crossproductResult[2]>0 && crossproductResult2[2]>0) || (crossproductResult[2]<0 && crossproductResult2[2]<0)){
-                    tempNormalOfEdge[0]*=-1;
-                    tempNormalOfEdge[1]*=-1;
-                    return;
-                }
-                else{
-                    return;
-                }
-                
-                
-                
-            }
-            
-            function pt_velocity(i,p, velocityOfPointOnBody){
-                
-                tempArray[0] = p[0] - bodies[i].x[0];
-                tempArray[1] = p[1] - bodies[i].x[1];
-                tempArray[2] = 0;
-                
-                crossproduct(bodies[i].omega, tempArray, tempArray2);
-                
-                velocityOfPointOnBody[0] = bodies[i].v[0] + tempArray2[0];
-                velocityOfPointOnBody[1] = bodies[i].v[1] + tempArray2[1];
-                velocityOfPointOnBody[2] = 0;
-                
-            }
-            
-            function dotproduct(a,b){
-                
-                return a[0]*b[0]+a[1]*b[1];
-            }
-            
-            function vectorminus(a,b,r){
-                
-                r[0] = a[0]-b[0];
-                r[1] = a[1]-b[1];
-                r[2] = 0;
-                
-            }
-            
-            function colliding(c){
-                
-                
-                pt_velocity(c.a,c.p,padot);
-                pt_velocity(c.b,c.p,pbdot);
-                
-                vectorminus(padot, pbdot, tempArray);
-                
-                vrel = dotproduct(c.n, tempArray);
-                
-                
-                if (vrel>0.00001){
-                    return false;
-                }
-                else if (vrel>-0.00001){
-                    return false;
-                }
-                else{
-                    return true;
-                }
-                
-            }
-            
-            function collision(c){
-                
-                pt_velocity(c.a, c.p, padot);
-                pt_velocity(c.b, c.p, pbdot);
-                vectorminus(c.p, bodies[c.a].x, ra);
-                vectorminus(c.p, bodies[c.b].x, rb);
-                vectorminus(padot, pbdot, tempArray);
-                vrel = dotproduct(c.n, tempArray);
-                numerator = -(1+epsilon)*vrel;
-                
-                
-                term1 = 1/(bodies[c.a].mass);
-                term2 = 1/(bodies[c.b].mass);
-                
-                crossproduct(ra, c.n, tempArray);
-                crossproduct(numeric.dot(bodies[c.a].Iinv,tempArray),ra, tempArray);
-                term3 = dotproduct(c.n, tempArray);
-                
-                crossproduct(rb, c.n, tempArray);
-                crossproduct(numeric.dot(bodies[c.b].Iinv,tempArray),rb, tempArray);
-                term4 = dotproduct(c.n, tempArray);
-                
-                j = numerator/(term1+term2+term3+term4);
-                force[0] = j*c.n[0];
-                force[1] = j*c.n[1];
-                force[2] = 0;
-                
-                bodies[c.a].P[0] = bodies[c.a].P[0] + force[0];
-                bodies[c.a].P[1] = bodies[c.a].P[1] + force[1];
-                
-                bodies[c.b].P[0] = bodies[c.b].P[0] - force[0];
-                bodies[c.b].P[1] = bodies[c.b].P[1] - force[1];
-                
-                
-                crossproduct(ra, force, tempArray);
-                bodies[c.a].L[0] = bodies[c.a].L[0] + tempArray[0];
-                bodies[c.a].L[1] = bodies[c.a].L[1] + tempArray[1];
-                bodies[c.a].L[2] = bodies[c.a].L[2] + tempArray[2];
-                
-                crossproduct(rb, force, tempArray);
-                bodies[c.b].L[0] = bodies[c.b].L[0] - tempArray[0];
-                bodies[c.b].L[1] = bodies[c.b].L[1] - tempArray[1];
-                bodies[c.b].L[2] = bodies[c.b].L[2] - tempArray[2];
-                
-                bodies[c.a].v[0] = bodies[c.a].P[0] / bodies[c.a].mass;
-                bodies[c.a].v[1] = bodies[c.a].P[1] / bodies[c.a].mass;
-                
-                bodies[c.b].v[0] = bodies[c.b].P[0] / bodies[c.b].mass;
-                bodies[c.b].v[1] = bodies[c.b].P[1] / bodies[c.b].mass;
-                
-                bodies[c.a].omega = numeric.dot(bodies[c.a].Iinv, bodies[c.a].L );
-                bodies[c.b].omega = numeric.dot(bodies[c.b].Iinv, bodies[c.b].L );
-               
-            }
-            
-            function find_all_collisions(){
-                
-                var had_collision;
-                
-                do{
-                    had_collision = false;
-                    
-                    for (var i = 0;i<collisionCount;i++){
-                        
-                        
-                        if (colliding(collisions[i])){
-                            
-                            collision(collisions[i]);
-                            
-                            //had_collision = true;
-                            
-                            
-                        }
-                    }
-                }
-                while(had_collision == true);
-                
-                bodies_to_array(xFinal);
-                collisionCount=0;
-            }
-            
-            function initCollision(i,k){
-                
-                tempInterpenetratingVertex = detectInterpenetratingVertexOfCollision(i,k);
-                computeNormalOfPenetratedEdge(i,k);
-                computePositionOfInterpenetrationOnVertex(i,k);
-                contact = new Contact();
-                contact.a = separationInformation[i][k-(i+1)].bodyb;
-                contact.b = separationInformation[i][k-(i+1)].bodya;
-                contact.p = positionOfInterpenetrationOnVertex.slice(0);
-                contact.n = tempNormalOfEdge.slice(0);
-                collisions[collisionCount] = contact;
-                
-                
+                collisionDetection();
                 
                 //text = window.document.getElementById("textField");
-                //text.innerHTML = "oh oh oh "+counter+"... "+separationInformation[i][k-(i+1)].bodyb+"; "+separationInformation[i][k-(i+1)].bodya+"</br>"+tempInterpenetratingVertex+"</br>"+tempNormalOfEdge;
+                //text.innerHTML = counter;
                 
-            }
-        
-            var tempSeparatingEdgeStillValid= false;
-            var tempNewEdgeFound = false;
-            
-            function checkIfBodiesCollided(i,k){
-                
-                
-                if (separationInformation[i][k-(i+1)].collision==0){
-                    
-                    tempSeparatingEdgeStillValid = checkifedgevalid(separationInformation[i][k-(i+1)].bodya, separationInformation[i][k-(i+1)].separatingEdge, separationInformation[i][k-(i+1)].bodyb);
-                
-                    if (!tempSeparatingEdgeStillValid){
-                        
-                        
-                        
-                        tempNewEdgeFound = fillSeparationInformationBetweenBodies(i,k);
-                        
-                        if (!tempNewEdgeFound){
-                            
-                            initCollision(i,k);
-                            collisionCount++;
-                            
-                        }
-                 
-                    }
-                }
-                else{
-                    
-                    tempNewEdgeFound = fillSeparationInformationBetweenBodies(i,k);
-                    
-                    if (!tempNewEdgeFound){
-                        
-                        initCollision(i,k);
-                        collisionCount++;
-                        
-                    }
-                    
-                }
+                counter++;
                 
             }
             
@@ -1268,16 +474,12 @@
                 initGL();
                 initShaders();
                 initForces();
-                
                 calcVertexes();
                 initIntervalsForBoundingBoxCheck();
                 initSeparationInformation();
                 
                 gl.clearColor(0.0, 0.0, 0.0, 1.0);// Hintergrund löschen in Farbe 0
                 bodies_to_array(xFinal);
-                
-                
-                
                 
                 canvas = document.getElementById("webGLCanvas");
                                                                                                  

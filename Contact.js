@@ -8,3 +8,10 @@ function Contact(){
     this.eb = new Array(3);
     this.vf = false;
 }
+
+function FloorContact(){
+    
+    this.a = -1;
+    this.interpenetratingVertex = -1;
+    
+}
