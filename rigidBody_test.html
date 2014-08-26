@@ -13,7 +13,7 @@
             <script type="text/javascript" src="RestingContact.js"></script>
             <script type="text/javascript" src="Contact.js"></script>
             <script type="text/javascript">
-            var numberBodies = 2;
+            var numberBodies = 10;
             </script>
             <script type="text/javascript" src="CollisionHandling.js"></script>
             <script type="text/javascript" src="qpsolver.js"></script>
@@ -71,19 +71,28 @@
                    bodies[i].init();
             }
             
-            bodies[0].x[0]=-15.0;
+            bodies[0].x[0]=-14.0;
             bodies[0].x[1]=0.0;
             bodies[0].x[2]=0;
+
             bodies[1].x[0]=-12.0;
             bodies[1].x[1]=0.4;
             bodies[1].x[2]=0;
+
+            
+            for (var i=1;i<10;i++){
+                bodies[i].x[0]=-11+i*2.15;
+                bodies[i].x[1]=0;
+                bodies[i].x[2]=0;
+            }
+
             
             function initForces(){
                 
              //   bodies[0].force = [0.00008,-0.0000,0];
              //   crossproduct(bodies[0].force, [0.00,-0.2,0], bodies[0].torque);
-             bodies[0].force=[0.00008,0,0];
-             crossproduct([0.5,0.5,0],[0.00008,0,0],bodies[0].torque);
+             bodies[0].force=[0.005,0,0];
+             crossproduct([0.5,0.5,0],[0.008,0,0],bodies[0].torque);
                 
             }
             
@@ -337,10 +346,10 @@
                 
                 mat4.translate(mvMatrix, mvMatrix, [0,0,-3.0]);
                 
-                var right = 20;//+0.5;
-                var left = -20;//-0.5;
-                var upper = 20;//+0.5;
-                var lower = -20;//-0.5;
+                var right = 30;//+0.5;
+                var left = -30;//-0.5;
+                var upper = 30;//+0.5;
+                var lower = -30;//-0.5;
                 var zFar = 100.0;
                 var zNear = 0.1;
                 pMatrix = new Float32Array(
@@ -410,11 +419,11 @@
                }
                
                vertexes[numberBodies*15+0] = -30;
-               vertexes[numberBodies*15+1] = -2;
+               vertexes[numberBodies*15+1] = -10;
                vertexes[numberBodies*15+2] = 0;
                
                vertexes[numberBodies*15+3] = 30;
-               vertexes[numberBodies*15+4] = -2;
+               vertexes[numberBodies*15+4] = -10;
                vertexes[numberBodies*15+5] = 0;
                
                
@@ -447,6 +456,14 @@
                 findBoundingBoxOverlap2();
                 
             }
+            
+            function apply_gravity(){
+                
+                for (var i=0;i<numberBodies;i++){
+                    bodies[i].force[1]=bodies[i].force[1]-0.000098;
+                }
+                
+            }
            
             function nextFrame(){
                
@@ -463,18 +480,18 @@
                 
                 collisionDetection();
                 
-                //restingDetection();
-                
-                //text = window.document.getElementById("textField");
-                //text.innerHTML = counter;
-                var testpoint = new Array(3);
-                testpoint[0] = 10;
-                testpoint[1] = 0;
-                testpoint[2] = 0;
-                
-                //compute_acc_of_distance_between_vertex_and_point(0,2,testpoint,[-1,0.0]);
-                
                 counter++;
+                
+                if (counter>20){
+                    bodies[0].force[0]=0;
+                   // bodies[0].force[1]=0;
+                    bodies[0].force[2]=0;
+                    bodies[0].torque[0]=0;
+                    bodies[0].torque[1]=0;
+                    bodies[0].torque[2]=0;
+                }
+                
+                apply_gravity()
                 
             }
             

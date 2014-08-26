@@ -62,7 +62,10 @@ var rb = new Array(3);
 var force = new Array(3);
 var vrel;
 var numerator;
+
+
 var epsilon = 0.9;
+
 var term1;
 var term2;
 var term3;
@@ -1539,6 +1542,7 @@ function collisionDetection(){
     
     update_bounding_boxes_and_find_collisions();
     handle_all_collisions();
+    floor_collisions();
     
     collisionCount=0;
     
