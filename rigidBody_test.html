@@ -73,7 +73,7 @@
             bodies[0].x[2]=0;
             
             for (var i=1;i<10;i++){
-                bodies[i].x[0]=-11+i*2.1;
+                bodies[i].x[0]=-11+i*2.15;
                 bodies[i].x[1]=0;
                 bodies[i].x[2]=0;
             }
@@ -335,10 +335,10 @@
                 
                 mat4.translate(mvMatrix, mvMatrix, [0,0,-3.0]);
                 
-                var right = 30;//+0.5;
-                var left = -30;//-0.5;
-                var upper = 30;//+0.5;
-                var lower = -30;//-0.5;
+                var right = 20;//+0.5;
+                var left = -20;//-0.5;
+                var upper = 20;//+0.5;
+                var lower = -20;//-0.5;
                 var zFar = 100.0;
                 var zNear = 0.1;
                 pMatrix = new Float32Array(
