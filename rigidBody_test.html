@@ -10,13 +10,11 @@
             <script type="text/javascript" src="Quaternion.js"></script>
             <script type="text/javascript" src="rigidBody.js"></script>
             <script type="text/javascript" src="BoundingBoxOverlap.js"></script>
-            <script type="text/javascript" src="RestingContact.js"></script>
             <script type="text/javascript" src="Contact.js"></script>
             <script type="text/javascript">
             var numberBodies = 10;
             </script>
             <script type="text/javascript" src="CollisionHandling.js"></script>
-            <script type="text/javascript" src="qpsolver.js"></script>
             
             
             
@@ -59,40 +57,31 @@
             var vertexes = new Float32Array(15*numberBodies+6);
             var floorVertex = new Float32Array(6);
             floorVertex[0]=-50;
-            floorVertex[1]=0;
+            floorVertex[1]=-10;
             floorVertex[2]=0;
             floorVertex[3]=50;
-            floorVertex[4]=0;
+            floorVertex[4]=-10;
             floorVertex[5]=0;
             var bodies = new Array(numberBodies);
-            
-            for (var i=0;i<numberBodies;i++){
+            for (var i=0;i<numberBodies+1;i++){
                    bodies[i] = new rigidBody();
                    bodies[i].init();
             }
             
-            bodies[0].x[0]=-14.0;
+            bodies[0].x[0]=-15.0;
             bodies[0].x[1]=0.0;
             bodies[0].x[2]=0;
-
-            bodies[1].x[0]=-12.0;
-            bodies[1].x[1]=0.4;
-            bodies[1].x[2]=0;
-
             
             for (var i=1;i<10;i++){
-                bodies[i].x[0]=-11+i*2.15;
+                bodies[i].x[0]=-11+i*2.1;
                 bodies[i].x[1]=0;
                 bodies[i].x[2]=0;
             }
-
             
             function initForces(){
                 
-             //   bodies[0].force = [0.00008,-0.0000,0];
-             //   crossproduct(bodies[0].force, [0.00,-0.2,0], bodies[0].torque);
-             bodies[0].force=[0.005,0,0];
-             crossproduct([0.5,0.5,0],[0.008,0,0],bodies[0].torque);
+                bodies[0].force = [0.004,-0.0000,0];
+                crossproduct(bodies[0].force, [0.00,-0.3,0], bodies[0].torque);
                 
             }
             
@@ -254,7 +243,7 @@
             
             function compute_force_and_torque(i){
                 
-               // bodies[i].force[1]-=0.000009;
+                bodies[i].force[1]-=0.000009;
                 
                 
             }
@@ -449,21 +438,6 @@
                 
                 
             }
-            
-            function restingDetection(){
-                
-                updateBoundingBoxes();
-                findBoundingBoxOverlap2();
-                
-            }
-            
-            function apply_gravity(){
-                
-                for (var i=0;i<numberBodies;i++){
-                    bodies[i].force[1]=bodies[i].force[1]-0.000098;
-                }
-                
-            }
            
             function nextFrame(){
                
@@ -472,7 +446,14 @@
                 for (var i=0; i<stateSize*numberBodies; i++){
                     x0[i] = xFinal[i];
                 }
-               
+                
+                if (counter>40){
+                    bodies[0].force[0]=0;
+                    bodies[0].force[2]=0;
+                    bodies[0].torque[0]=0;
+                    bodies[0].torque[1]=0;
+                    bodies[0].torque[2]=0;
+                }
                 
                 ode(x0, xFinal, stateSize*numberBodies, t, t+1/24, Dxdt);
                 
@@ -480,18 +461,10 @@
                 
                 collisionDetection();
                 
+                //text = window.document.getElementById("textField");
+                //text.innerHTML = counter;
+                
                 counter++;
-                
-                if (counter>20){
-                    bodies[0].force[0]=0;
-                   // bodies[0].force[1]=0;
-                    bodies[0].force[2]=0;
-                    bodies[0].torque[0]=0;
-                    bodies[0].torque[1]=0;
-                    bodies[0].torque[2]=0;
-                }
-                
-                apply_gravity()
                 
             }
             
@@ -510,7 +483,7 @@
                 
                 canvas = document.getElementById("webGLCanvas");
                                                                                                  
-                g_DrawInterval = setInterval(nextFrame,30);
+                g_DrawInterval = setInterval(nextFrame,10);
                                                                                                  
                 var renderLoop = function() {
                             requestAnimFrame(renderLoop);
