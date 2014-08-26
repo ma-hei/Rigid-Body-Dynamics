@@ -10,11 +10,13 @@
             <script type="text/javascript" src="Quaternion.js"></script>
             <script type="text/javascript" src="rigidBody.js"></script>
             <script type="text/javascript" src="BoundingBoxOverlap.js"></script>
+            <script type="text/javascript" src="RestingContact.js"></script>
             <script type="text/javascript" src="Contact.js"></script>
             <script type="text/javascript">
-            var numberBodies = 10;
+            var numberBodies = 2;
             </script>
             <script type="text/javascript" src="CollisionHandling.js"></script>
+            <script type="text/javascript" src="qpsolver.js"></script>
             
             
             
@@ -57,13 +59,14 @@
             var vertexes = new Float32Array(15*numberBodies+6);
             var floorVertex = new Float32Array(6);
             floorVertex[0]=-50;
-            floorVertex[1]=-10;
+            floorVertex[1]=0;
             floorVertex[2]=0;
             floorVertex[3]=50;
-            floorVertex[4]=-10;
+            floorVertex[4]=0;
             floorVertex[5]=0;
             var bodies = new Array(numberBodies);
-            for (var i=0;i<numberBodies+1;i++){
+            
+            for (var i=0;i<numberBodies;i++){
                    bodies[i] = new rigidBody();
                    bodies[i].init();
             }
@@ -71,17 +74,16 @@
             bodies[0].x[0]=-15.0;
             bodies[0].x[1]=0.0;
             bodies[0].x[2]=0;
-            
-            for (var i=1;i<10;i++){
-                bodies[i].x[0]=-11+i*2.1;
-                bodies[i].x[1]=0;
-                bodies[i].x[2]=0;
-            }
+            bodies[1].x[0]=-12.0;
+            bodies[1].x[1]=0.4;
+            bodies[1].x[2]=0;
             
             function initForces(){
                 
-                bodies[0].force = [0.004,-0.0000,0];
-                crossproduct(bodies[0].force, [0.00,-0.3,0], bodies[0].torque);
+             //   bodies[0].force = [0.00008,-0.0000,0];
+             //   crossproduct(bodies[0].force, [0.00,-0.2,0], bodies[0].torque);
+             bodies[0].force=[0.00008,0,0];
+             crossproduct([0.5,0.5,0],[0.00008,0,0],bodies[0].torque);
                 
             }
             
@@ -243,7 +245,7 @@
             
             function compute_force_and_torque(i){
                 
-                bodies[i].force[1]-=0.000009;
+               // bodies[i].force[1]-=0.000009;
                 
                 
             }
@@ -335,10 +337,10 @@
                 
                 mat4.translate(mvMatrix, mvMatrix, [0,0,-3.0]);
                 
-                var right = 30;//+0.5;
-                var left = -30;//-0.5;
-                var upper = 30;//+0.5;
-                var lower = -30;//-0.5;
+                var right = 20;//+0.5;
+                var left = -20;//-0.5;
+                var upper = 20;//+0.5;
+                var lower = -20;//-0.5;
                 var zFar = 100.0;
                 var zNear = 0.1;
                 pMatrix = new Float32Array(
@@ -408,11 +410,11 @@
                }
                
                vertexes[numberBodies*15+0] = -30;
-               vertexes[numberBodies*15+1] = -10;
+               vertexes[numberBodies*15+1] = -2;
                vertexes[numberBodies*15+2] = 0;
                
                vertexes[numberBodies*15+3] = 30;
-               vertexes[numberBodies*15+4] = -10;
+               vertexes[numberBodies*15+4] = -2;
                vertexes[numberBodies*15+5] = 0;
                
                
@@ -438,6 +440,13 @@
                 
                 
             }
+            
+            function restingDetection(){
+                
+                updateBoundingBoxes();
+                findBoundingBoxOverlap2();
+                
+            }
            
             function nextFrame(){
                
@@ -446,14 +455,7 @@
                 for (var i=0; i<stateSize*numberBodies; i++){
                     x0[i] = xFinal[i];
                 }
-                
-                if (counter>40){
-                    bodies[0].force[0]=0;
-                    bodies[0].force[2]=0;
-                    bodies[0].torque[0]=0;
-                    bodies[0].torque[1]=0;
-                    bodies[0].torque[2]=0;
-                }
+               
                 
                 ode(x0, xFinal, stateSize*numberBodies, t, t+1/24, Dxdt);
                 
@@ -461,8 +463,16 @@
                 
                 collisionDetection();
                 
+                //restingDetection();
+                
                 //text = window.document.getElementById("textField");
                 //text.innerHTML = counter;
+                var testpoint = new Array(3);
+                testpoint[0] = 10;
+                testpoint[1] = 0;
+                testpoint[2] = 0;
+                
+                //compute_acc_of_distance_between_vertex_and_point(0,2,testpoint,[-1,0.0]);
                 
                 counter++;
                 
@@ -483,7 +493,7 @@
                 
                 canvas = document.getElementById("webGLCanvas");
                                                                                                  
-                g_DrawInterval = setInterval(nextFrame,10);
+                g_DrawInterval = setInterval(nextFrame,30);
                                                                                                  
                 var renderLoop = function() {
                             requestAnimFrame(renderLoop);

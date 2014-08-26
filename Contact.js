@@ -7,6 +7,7 @@ function Contact(){
     this.ea = new Array(3);
     this.eb = new Array(3);
     this.vf = false;
+    this.v = -1;
 }
 
 function FloorContact(){
